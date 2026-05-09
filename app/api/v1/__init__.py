@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import stocks, indicators, ml, backtest, scheduler, sample_data, cache, auth, advanced
+from app.api.v1.endpoints import stocks, indicators, ml, backtest, scheduler, sample_data, cache, auth, advanced, options
 
 api_router = APIRouter()
 
@@ -12,3 +12,4 @@ api_router.include_router(sample_data.router, prefix="/sample", tags=["sample"])
 api_router.include_router(cache.router, prefix="/cache", tags=["cache"])
 api_router.include_router(auth.router)
 api_router.include_router(advanced.router, prefix="/advanced", tags=["advanced"])
+api_router.include_router(options.router, prefix="/options", tags=["options"])

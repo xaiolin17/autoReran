@@ -61,6 +61,90 @@
                 </div>
             </div>
         </div>
+
+        <!-- 期权数据展示窗口 -->
+        <div class="options-section" id="optionsSection" style="display: none;">
+            <h2>🎯 期权数据 - 多空分析</h2>
+            
+            <!-- 期权摘要统计 -->
+            <div class="charts-container">
+                <div class="chart-card option-summary-card">
+                    <h3>📈 期权摘要</h3>
+                    <div id="optionSummary">
+                        <div class="empty-state">
+                            <span class="empty-state-icon">⏳</span>
+                            <p>点击下方按钮加载期权数据</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>📊 多空对比</h3>
+                    <canvas id="optionRatioChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- 期权链表格 -->
+            <div class="option-chain-container">
+                <div class="option-chain-controls">
+                    <div class="control-group">
+                        <label for="expireDateSelect">到期月份</label>
+                        <select id="expireDateSelect" class="form-select">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <button id="loadOptionsBtn" class="btn btn-primary">加载期权数据</button>
+                    <button id="refreshOptionsBtn" class="btn btn-secondary" style="display: none;">
+                        🔄 刷新
+                    </button>
+                </div>
+                
+                <div class="option-chain-table-wrapper">
+                    <table class="option-chain-table" id="optionChainTable">
+                        <thead>
+                            <tr>
+                                <th colspan="9" class="option-header-call">📈 看涨期权 (Call)</th>
+                                <th class="option-header-strike">行权价</th>
+                                <th colspan="9" class="option-header-put">📉 看跌期权 (Put)</th>
+                            </tr>
+                            <tr>
+                                <!-- Call 列 -->
+                                <th>代码</th>
+                                <th>最新价</th>
+                                <th>涨跌幅</th>
+                                <th>买价</th>
+                                <th>买量</th>
+                                <th>卖价</th>
+                                <th>卖量</th>
+                                <th>成交量</th>
+                                <th>持仓量</th>
+                                <!-- 行权价 -->
+                                <th class="strike-col">Strike</th>
+                                <!-- Put 列 -->
+                                <th>持仓量</th>
+                                <th>成交量</th>
+                                <th>卖量</th>
+                                <th>卖价</th>
+                                <th>买量</th>
+                                <th>买价</th>
+                                <th>涨跌幅</th>
+                                <th>最新价</th>
+                                <th>代码</th>
+                            </tr>
+                        </thead>
+                        <tbody id="optionChainBody">
+                            <tr>
+                                <td colspan="19">
+                                    <div class="empty-state" style="padding: 40px;">
+                                        <span class="empty-state-icon">🎯</span>
+                                        <p>点击"加载期权数据"查看期权链</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/chart.js"></script>

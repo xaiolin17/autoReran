@@ -6,6 +6,7 @@ from app.api.v1.endpoints import scheduler
 from app.api.v1.endpoints import sample_data
 from app.api.v1.endpoints import cache
 from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import options
 
 __all__ = [
     "stocks",
@@ -15,5 +16,6 @@ __all__ = [
     "scheduler",
     "sample_data",
     "cache",
-    "auth"
+    "auth",
+    "options"
 ]
