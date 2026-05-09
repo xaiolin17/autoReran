@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票数据分析平台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📈 股票数据分析平台</h1>
+            <nav class="nav">
+                <a href="/" class="nav-link active">数据查看</a>
+                <a href="/training" class="nav-link">模型训练</a>
+                <a href="/backtest" class="nav-link">策略回测</a>
+            </nav>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="stockCode">股票代码</label>
+                <input type="text" id="stockCode" value="SAMPLE" placeholder="输入股票代码">
+            </div>
+            <div class="control-group">
+                <button id="fetchBtn" class="btn btn-primary">获取数据</button>
+                <button id="generateBtn" class="btn btn-secondary">生成示例数据</button>
+            </div>
+        </div>
+
+        <div class="charts-container">
+            <div class="chart-card">
+                <h2>价格走势图</h2>
+                <canvas id="priceChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>成交量</h2>
+                <canvas id="volumeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="charts-container">
+            <div class="chart-card">
+                <h2>KDJ指标</h2>
+                <canvas id="kdjChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>MACD指标</h2>
+                <canvas id="macdChart"></canvas>
+            </div>
+        </div>
+
+        <div class="signals-section">
+            <h2>交易信号</h2>
+            <div id="signalsContainer" class="signals-container">
+                <p class="empty-state">暂无交易信号</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/chart.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

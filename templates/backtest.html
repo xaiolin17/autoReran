@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>策略回测 - 股票数据分析平台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📊 策略回测</h1>
+            <nav class="nav">
+                <a href="/" class="nav-link">数据查看</a>
+                <a href="/training" class="nav-link">模型训练</a>
+                <a href="/backtest" class="nav-link active">策略回测</a>
+            </nav>
+        </header>
+
+        <div class="content-grid">
+            <div class="form-card">
+                <h2>回测配置</h2>
+                <form id="backtestForm" class="form">
+                    <div class="form-group">
+                        <label for="backtestStockCode">股票代码</label>
+                        <input type="text" id="backtestStockCode" value="SAMPLE" placeholder="输入股票代码">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategyName">策略名称</label>
+                        <select id="strategyName">
+                            <option value="KDJ">KDJ策略</option>
+                            <option value="MACD">MACD策略</option>
+                            <option value="KDJ_MACD">KDJ+MACD策略</option>
+                            <option value="DEFAULT">默认策略</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="startDate">开始日期</label>
+                        <input type="date" id="startDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">结束日期</label>
+                        <input type="date" id="endDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="initialCapital">初始资金</label>
+                        <input type="number" id="initialCapital" value="100000" min="10000" step="10000">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large">运行回测</button>
+                </form>
+                <div id="backtestStatus" class="status-message" style="display: none;"></div>
+            </div>
+
+            <div class="list-card">
+                <h2>回测结果</h2>
+                <div id="backtestsList" class="models-list">
+                    <p class="empty-state">暂无回测结果</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="backtestResultDetail" class="result-detail" style="display: none;">
+            <h2>回测详情</h2>
+            <div class="result-cards">
+                <div class="stat-card">
+                <div class="stat-label">总收益率</div>
+                <div class="stat-value" id="totalReturn">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">年化收益率</div>
+                <div class="stat-value" id="annualReturn">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">最大回撤</div>
+                <div class="stat-value" id="maxDrawdown">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">胜率</div>
+                <div class="stat-value" id="winRate">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">总交易次数</div>
+                <div class="stat-value" id="totalTrades">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">最终资金</div>
+                <div class="stat-value" id="finalCapital">-</div>
+            </div>
+        </div>
+        </div>
+        <div class="trade-log-section">
+            <h3>交易记录</h3>
+            <div id="tradeLog" class="trade-log"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/backtest.js"></script>
+</body>
+</html>
