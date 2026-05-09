@@ -1,19 +1,25 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 *.so
 .Python
-*.so
-*.egg-info/
-dist/
 build/
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.hypothesis/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual Environment
 venv/
@@ -27,32 +33,104 @@ ENV/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 stock_data.db
+backup/
+backups/
 
 # Models
 models/
 *.pkl
 *.joblib
+*.pth
+*.pt
+*.h5
+*.keras
 
 # Environment variables
 .env
 .env.local
 .env.*.local
+.secrets
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
 logs/
+*.log.*
 
 # Temporary files
 *.tmp
 *.temp
 .cache/
+tmp/
+temp/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.pytest_cache/
+*.mypy_cache/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.svelte-kit/
+*.local
+
+# Docker
+docker-compose.override.yml
+*.dockerfile.local
+.dockerignore
+
+# Kubernetes
+*.kubeconfig
+*.kubeconfig.local
+
+# Monitoring
+grafana/data/
+grafana/provisioning/dashboards/*.json
+prometheus/data/
+
+# Production artifacts
+*.pid
+*.seed
+*.pid.lock
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Package manager
+*.tsbuildinfo
+*.tsbuildinfo.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Misc
+*.bak
+*.old
+*.save
+*.swp
