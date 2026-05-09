@@ -1,19 +1,163 @@
 let optionRatioChart = null;
 let currentOptionData = null;
+let wsConnection = null;
+let dataCache = new Map();
+let CACHE_TTL = 30000; // 30秒
 
 document.addEventListener('DOMContentLoaded', () => {
     initCharts();
+    initWebSocket();
     loadData();
     setupEventListeners();
     initOptionSection();
 });
 
 function setupEventListeners() {
-    document.getElementById('fetchBtn').addEventListener('click', loadData);
-    document.getElementById('generateBtn').addEventListener('click', generateSampleData);
-    document.getElementById('loadOptionsBtn').addEventListener('click', loadOptionData);
-    document.getElementById('refreshOptionsBtn').addEventListener('click', loadOptionData);
-    document.getElementById('expireDateSelect').addEventListener('change', filterOptionData);
+    const fetchBtn = document.getElementById('fetchBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const loadOptionsBtn = document.getElementById('loadOptionsBtn');
+    const refreshOptionsBtn = document.getElementById('refreshOptionsBtn');
+    const expireDateSelect = document.getElementById('expireDateSelect');
+    
+    // 添加防抖
+    const debouncedLoadData = debounce(loadData, 300);
+    const debouncedLoadOptions = debounce(loadOptionData, 400);
+    
+    fetchBtn.addEventListener('click', debouncedLoadData);
+    generateBtn.addEventListener('click', debounce(generateSampleData, 300));
+    loadOptionsBtn.addEventListener('click', debouncedLoadOptions);
+    refreshOptionsBtn.addEventListener('click', debouncedLoadOptions);
+    expireDateSelect.addEventListener('change', debounce(filterOptionData, 200));
+}
+
+// ===== 防抖节流函数 =====
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function throttle(func, limit) {
+    let lastCall = 0;
+    return function(...args) {
+        const now = Date.now();
+        if (now - lastCall >= limit) {
+            lastCall = now;
+            return func(...args);
+        }
+    };
+}
+
+// ===== WebSocket 实时连接 =====
+function initWebSocket() {
+    const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
+    
+    wsConnection = new WebSocket(wsUrl);
+    
+    wsConnection.onopen = () => {
+        console.log('WebSocket连接已建立');
+        // 发送订阅消息
+        wsConnection.send(JSON.stringify({
+            type: 'subscribe',
+            channel: 'realtime'
+        }));
+        showMessage('实时连接已建立', 'info');
+    };
+    
+    wsConnection.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+        } catch (e) {
+            console.error('解析WebSocket消息失败:', e);
+        }
+    };
+    
+    wsConnection.onclose = () => {
+        console.log('WebSocket连接已关闭，尝试重新连接...');
+        setTimeout(initWebSocket, 3000);
+    };
+    
+    wsConnection.onerror = (error) => {
+        console.error('WebSocket连接错误:', error);
+    };
+}
+
+function handleWebSocketMessage(message) {
+    switch (message.type) {
+        case 'pong':
+            // 健康检查响应
+            break;
+        case 'subscribed':
+            console.log('已订阅频道:', message.channel);
+            break;
+        case 'refresh_needed':
+            // 收到数据刷新通知，提示用户刷新
+            if (message.reason !== 'manual_refresh' || message.sender !== getCurrentClientId()) {
+                showMessage('有新数据更新，点击刷新按钮获取最新数据', 'warning');
+            }
+            break;
+    }
+}
+
+function getCurrentClientId() {
+    if (wsConnection) {
+        const url = wsConnection.url;
+        const parts = url.split('/');
+        return parts[parts.length - 1];
+    }
+    return '';
+}
+
+// ===== 数据缓存管理 =====
+function getCachedData(key) {
+    const cached = dataCache.get(key);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+    }
+    dataCache.delete(key);
+    return null;
+}
+
+function setCacheData(key, data) {
+    dataCache.set(key, { data, timestamp: Date.now() });
+}
+
+// ===== 网络请求优化 =====
+async function safeFetch(url, options = {}) {
+    // 检查缓存
+    const cacheKey = `${options.method || 'GET'}_${url}`;
+    const cached = getCachedData(cacheKey);
+    if (cached && !options.skipCache) {
+        return cached;
+    }
+    
+    // 带超时的 fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        const data = await response.json();
+        setCacheData(cacheKey, data);
+        return data;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
 }
 
 function initOptionSection() {
@@ -79,8 +223,7 @@ async function loadData() {
     showLoading(true);
     
     try {
-        const response = await fetch(`/api/v1/indicators/${stockCode}`);
-        const data = await response.json();
+        const data = await safeFetch(`/api/v1/indicators/${stockCode}`);
         
         if (data && data.length > 0) {
             updateCharts(data);
@@ -115,12 +258,18 @@ async function generateSampleData() {
     showLoading(true);
     
     try {
-        const response = await fetch(`/api/v1/sample/generate/${stockCode}`, { method: 'POST' });
-        const result = await response.json();
+        const result = await safeFetch(`/api/v1/sample/generate/${stockCode}`, { 
+            method: 'POST', 
+            skipCache: true 
+        });
         
         if (result.success) {
             showMessage(result.message || '示例数据生成成功！', 'success');
             loadData();
+            // 通知其他客户端刷新
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+                wsConnection.send(JSON.stringify({ type: 'refresh' }));
+            }
         } else {
             showMessage(result.message || '生成数据失败', 'error');
         }
@@ -134,8 +283,7 @@ async function generateSampleData() {
 
 async function loadSignals(stockCode) {
     try {
-        const response = await fetch(`/api/v1/indicators/signals/${stockCode}`);
-        const result = await response.json();
+        const result = await safeFetch(`/api/v1/indicators/signals/${stockCode}`);
         displaySignals(result.signals);
     } catch (error) {
         console.error('加载信号失败:', error);
@@ -217,13 +365,12 @@ async function loadOptionData() {
     
     try {
         // Load option chain and summary in parallel
-        const [chainResponse, summaryResponse] = await Promise.all([
-            fetch(`/api/v1/options/chain/${stockCode}`),
-            fetch(`/api/v1/options/chain/${stockCode}/summary`)
+        const [chainData, summary] = await Promise.all([
+            safeFetch(`/api/v1/options/chain/${stockCode}`),
+            safeFetch(`/api/v1/options/chain/${stockCode}/summary`)
         ]);
         
-        currentOptionData = await chainResponse.json();
-        const summary = await summaryResponse.json();
+        currentOptionData = chainData;
         
         // Update expire date select
         updateExpireDateSelect(currentOptionData.expire_dates);

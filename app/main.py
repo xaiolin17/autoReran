@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +9,7 @@ from app.core.logger import logger
 from app.core.monitoring import metrics_middleware, get_metrics
 from app.core.serialization import ORJSONResponse
 from app.core.security_middleware import setup_security_middleware
+from app.core.websocket_manager import manager as ws_manager
 from app.api.v1 import api_router
 
 
@@ -103,3 +104,38 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info(f"{settings.PROJECT_NAME} 关闭")
+
+
+# ===== WebSocket 实时通知端点 =====
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await ws_manager.connect(websocket, channel="realtime")
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            
+            # 处理客户端消息
+            if data.get("type") == "ping":
+                await ws_manager.send_personal_message(
+                    {"type": "pong", "timestamp": data.get("timestamp")},
+                    websocket
+                )
+            elif data.get("type") == "subscribe":
+                channel = data.get("channel", "realtime")
+                await ws_manager.send_personal_message(
+                    {"type": "subscribed", "channel": channel},
+                    websocket
+                )
+            elif data.get("type") == "refresh":
+                # 广播数据刷新通知
+                await ws_manager.broadcast(
+                    {"type": "refresh_needed", "reason": "manual_refresh", "sender": client_id},
+                    channel="realtime"
+                )
+                
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, channel="realtime")
+    except Exception as e:
+        logger.error(f"WebSocket连接错误: {str(e)}")
+        ws_manager.disconnect(websocket, channel="realtime")
