@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
-from app.schemas.ml import MLModel, TrainingRequest
+from app.schemas.ml import MLModel, TrainingRequest, SignalPrediction
 from app.services.ml_service import MLService
 
 router = APIRouter()
@@ -26,6 +26,24 @@ def predict(
     service = MLService(db)
     try:
         return service.predict(model_id, stock_code)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/predict-signal", response_model=SignalPrediction)
+def predict_signal(
+    model_id: int,
+    stock_code: str,
+    db: Session = Depends(get_db)
+):
+    """
+    专业多空信号预测接口
+    
+    返回 BUY/SELL/HOLD 信号，包括信号强度、置信度和详细解释
+    """
+    service = MLService(db)
+    try:
+        return service.predict_signal(model_id, stock_code)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

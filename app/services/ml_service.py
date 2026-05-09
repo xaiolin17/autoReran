@@ -4,14 +4,17 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import (
+    mean_squared_error, mean_absolute_error, r2_score,
+    accuracy_score, precision_score, recall_score, f1_score
+)
 import joblib
 import os
 from app.models.ml_model import MLModel
-from app.schemas.ml import MLModelCreate, TrainingRequest
+from app.schemas.ml import MLModelCreate, TrainingRequest, SignalPrediction
 from app.services.stock_service import StockService
 from app.utils.technical_indicators import TechnicalIndicators
 from app.core.logger import logger
@@ -50,33 +53,74 @@ class MLService:
         available_features = [col for col in feature_columns if col in df.columns]
         logger.debug(f"使用特征: {available_features}")
         
-        df['target'] = df['close_price'].shift(-1)
-        df = df.dropna()
-        
-        X = df[available_features]
-        y = df['target']
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, train_size=request.train_size, shuffle=False
-        )
-        
-        if request.model_type == "RandomForest":
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
+        if request.is_classification:
+            # 分类模型：预测涨跌（1=涨，0=跌）
+            df['target'] = (df['close_price'].shift(-1) > df['close_price']).astype(int)
+            df = df.dropna()
+            
+            X = df[available_features]
+            y = df['target']
+            
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, train_size=request.train_size, shuffle=False
+            )
+            
+            if request.model_type == "RandomForest":
+                model = RandomForestClassifier(n_estimators=100, random_state=42)
+            else:
+                model = LogisticRegression(max_iter=1000)
+            
+            model.fit(X_train, y_train)
+            
+            y_pred = model.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            precision = precision_score(y_test, y_pred, zero_division=0)
+            recall = recall_score(y_test, y_pred, zero_division=0)
+            f1 = f1_score(y_test, y_pred, zero_division=0)
+            
+            logger.info(f"分类模型训练完成 - Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+            
+            description = f"Classification model trained with {len(X_train)} samples. Accuracy: {accuracy:.4f}"
         else:
-            model = LinearRegression()
-        
-        model.fit(X_train, y_train)
-        
-        y_pred = model.predict(X_test)
-        mse = mean_squared_error(y_test, y_pred)
-        mae = mean_absolute_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        
-        logger.info(f"模型训练完成 - R2: {r2:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}")
+            # 回归模型：预测价格
+            df['target'] = df['close_price'].shift(-1)
+            df = df.dropna()
+            
+            X = df[available_features]
+            y = df['target']
+            
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, train_size=request.train_size, shuffle=False
+            )
+            
+            if request.model_type == "RandomForest":
+                model = RandomForestRegressor(n_estimators=100, random_state=42)
+            else:
+                model = LinearRegression()
+            
+            model.fit(X_train, y_train)
+            
+            y_pred = model.predict(X_test)
+            mse = mean_squared_error(y_test, y_pred)
+            mae = mean_absolute_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+            
+            accuracy = r2
+            precision = 1 - mae / y.mean() if y.mean() != 0 else 0
+            recall = 1 - np.sqrt(mse) / y.mean() if y.mean() != 0 else 0
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            
+            logger.info(f"回归模型训练完成 - R2: {r2:.4f}, MSE: {mse:.4f}, MAE: {mae:.4f}")
+            
+            description = f"Regression model trained with {len(X_train)} samples. R2: {r2:.4f}"
         
         model_filename = f"{request.model_name}_{request.stock_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
         model_path = os.path.join(settings.MODELS_DIR, model_filename)
-        joblib.dump(model, model_path)
+        joblib.dump({
+            'model': model,
+            'is_classification': request.is_classification,
+            'feature_columns': available_features
+        }, model_path)
         
         db_model = MLModelCreate(
             model_name=request.model_name,
@@ -85,14 +129,14 @@ class MLService:
             feature_columns=available_features,
             target_column=request.target_column,
             model_path=model_path,
-            description=f"Model trained with {len(X_train)} samples. R2: {r2:.4f}"
+            description=description
         )
         
         db_ml_model = MLModel(**db_model.model_dump())
-        db_ml_model.accuracy = r2
-        db_ml_model.precision = 1 - mae / y.mean() if y.mean() != 0 else 0
-        db_ml_model.recall = 1 - np.sqrt(mse) / y.mean() if y.mean() != 0 else 0
-        db_ml_model.f1_score = 2 * (db_ml_model.precision * db_ml_model.recall) / (db_ml_model.precision + db_ml_model.recall) if (db_ml_model.precision + db_ml_model.recall) > 0 else 0
+        db_ml_model.accuracy = accuracy
+        db_ml_model.precision = precision
+        db_ml_model.recall = recall
+        db_ml_model.f1_score = f1
         db_ml_model.created_at = datetime.now()
         
         self.db.add(db_ml_model)
@@ -112,7 +156,9 @@ class MLService:
         if not os.path.exists(db_model.model_path):
             raise ValueError("模型文件不存在")
         
-        model = joblib.load(db_model.model_path)
+        model_data = joblib.load(db_model.model_path)
+        model = model_data['model'] if isinstance(model_data, dict) else model_data
+        is_classification = model_data.get('is_classification', False) if isinstance(model_data, dict) else False
         
         stock_data = self.stock_service.get_stock_data(stock_code, "1d", limit=100)
         if not stock_data:
@@ -135,19 +181,181 @@ class MLService:
         prediction = model.predict(latest_data)[0]
         
         current_price = df.iloc[-1]['close_price']
-        change_percent = ((prediction - current_price) / current_price) * 100
         
-        result = {
-            'model_id': model_id,
-            'stock_code': stock_code,
-            'current_price': float(current_price),
-            'predicted_price': float(prediction),
-            'change_percent': float(change_percent),
-            'prediction_date': datetime.now().isoformat()
-        }
+        if is_classification:
+            # 分类预测
+            result = {
+                'model_id': model_id,
+                'stock_code': stock_code,
+                'current_price': float(current_price),
+                'prediction': int(prediction),  # 1=涨, 0=跌
+                'prediction_date': datetime.now().isoformat()
+            }
+        else:
+            # 回归预测
+            change_percent = ((prediction - current_price) / current_price) * 100
+            result = {
+                'model_id': model_id,
+                'stock_code': stock_code,
+                'current_price': float(current_price),
+                'predicted_price': float(prediction),
+                'change_percent': float(change_percent),
+                'prediction_date': datetime.now().isoformat()
+            }
         
-        logger.info(f"预测完成: 当前={current_price:.2f}, 预测={prediction:.2f}, 变化={change_percent:+.2f}%")
+        logger.info(f"预测完成: {result}")
         return result
+    
+    def predict_signal(self, model_id: int, stock_code: str) -> SignalPrediction:
+        """
+        专业多空信号预测：BUY/SELL/HOLD
+        
+        返回:
+            signal: 交易信号
+            signal_strength: 信号强度 0-100
+            confidence: 置信度 0-1
+            signal_explanation: 信号解释
+        """
+        logger.info(f"多空信号预测: model_id={model_id}, stock_code={stock_code}")
+        
+        db_model = self.db.get(MLModel, model_id)
+        if not db_model:
+            raise ValueError("模型不存在")
+        
+        if not os.path.exists(db_model.model_path):
+            raise ValueError("模型文件不存在")
+        
+        # 加载模型
+        model_data = joblib.load(db_model.model_path)
+        model = model_data.get('model', model_data) if isinstance(model_data, dict) else model_data
+        is_classification = model_data.get('is_classification', False) if isinstance(model_data, dict) else False
+        
+        # 获取最新数据
+        stock_data = self.stock_service.get_stock_data(stock_code, "1d", limit=100)
+        if not stock_data:
+            raise ValueError("没有可用的股票数据")
+        
+        df = self.stock_service.to_dataframe(stock_data)
+        df = TechnicalIndicators.calculate_all_indicators(df)
+        df = df.dropna()
+        
+        if len(df) < 20:
+            raise ValueError("有效数据不足，需要至少20条数据")
+        
+        # 获取特征
+        feature_columns = db_model.feature_columns or []
+        available_features = [col for col in feature_columns if col in df.columns]
+        
+        if not available_features:
+            raise ValueError("特征列不可用")
+        
+        # 获取最新数据点
+        latest_idx = -1
+        latest_data = df.iloc[latest_idx:latest_idx+1][available_features]
+        current_price = float(df.iloc[latest_idx]['close_price'])
+        
+        # 提取技术指标用于解释
+        tech_indicators = {}
+        if 'rsi' in df.columns:
+            tech_indicators['rsi'] = float(df.iloc[latest_idx]['rsi'])
+        if 'kdj_k' in df.columns:
+            tech_indicators['kdj_k'] = float(df.iloc[latest_idx]['kdj_k'])
+        if 'kdj_d' in df.columns:
+            tech_indicators['kdj_d'] = float(df.iloc[latest_idx]['kdj_d'])
+        if 'macd' in df.columns:
+            tech_indicators['macd'] = float(df.iloc[latest_idx]['macd'])
+        
+        # 执行预测
+        signal = "HOLD"
+        signal_strength = 50.0
+        confidence = 0.5
+        predicted_price = None
+        predicted_change_percent = None
+        explanation = ""
+        
+        if is_classification:
+            # 分类模型预测涨跌
+            prediction = model.predict(latest_data)[0]
+            prediction_proba = None
+            
+            if hasattr(model, 'predict_proba'):
+                prediction_proba = model.predict_proba(latest_data)[0]
+                confidence = float(np.max(prediction_proba))
+            else:
+                confidence = 0.6  # 默认置信度
+            
+            if prediction == 1:
+                # 看涨信号
+                signal = "BUY"
+                signal_strength = min(100.0, 50 + confidence * 50)
+                explanation = f"模型预测价格上涨，置信度 {confidence:.1%}。"
+                
+                # RSI 增强逻辑
+                if 'rsi' in tech_indicators and tech_indicators['rsi'] < 30:
+                    signal_strength = min(100.0, signal_strength + 20)
+                    explanation += f"RSI({tech_indicators['rsi']:.1f})处于超卖区间，增强买入信号。"
+                elif 'rsi' in tech_indicators and tech_indicators['rsi'] < 40:
+                    signal_strength = min(100.0, signal_strength + 10)
+                
+            else:
+                # 看跌信号
+                signal = "SELL"
+                signal_strength = min(100.0, 50 + confidence * 50)
+                explanation = f"模型预测价格下跌，置信度 {confidence:.1%}。"
+                
+                if 'rsi' in tech_indicators and tech_indicators['rsi'] > 70:
+                    signal_strength = min(100.0, signal_strength + 20)
+                    explanation += f"RSI({tech_indicators['rsi']:.1f})处于超买区间，增强卖出信号。"
+                elif 'rsi' in tech_indicators and tech_indicators['rsi'] > 60:
+                    signal_strength = min(100.0, signal_strength + 10)
+        
+        else:
+            # 回归模型预测价格
+            predicted_price = float(model.predict(latest_data)[0])
+            predicted_change_percent = ((predicted_price - current_price) / current_price) * 100
+            
+            # 基于涨跌幅确定信号
+            if predicted_change_percent > 1.0:
+                signal = "BUY"
+                signal_strength = min(100.0, 50 + abs(predicted_change_percent) * 10)
+                explanation = f"模型预测上涨 {predicted_change_percent:+.2f}%，建议买入。"
+            elif predicted_change_percent < -1.0:
+                signal = "SELL"
+                signal_strength = min(100.0, 50 + abs(predicted_change_percent) * 10)
+                explanation = f"模型预测下跌 {predicted_change_percent:+.2f}%，建议卖出。"
+            else:
+                signal = "HOLD"
+                signal_strength = 50.0 - abs(predicted_change_percent) * 5
+                explanation = f"预测波动较小 ({predicted_change_percent:+.2f}%)，建议持有观望。"
+            
+            # 使用模型准确性作为置信度
+            confidence = max(0.3, min(0.95, db_model.accuracy or 0.5))
+        
+        # KDJ 增强逻辑
+        if 'kdj_k' in tech_indicators and 'kdj_d' in tech_indicators:
+            k, d = tech_indicators['kdj_k'], tech_indicators['kdj_d']
+            if signal == "BUY" and k > d:
+                signal_strength = min(100.0, signal_strength + 10)
+                explanation += f"KDJ金叉，增强买入信号。"
+            elif signal == "SELL" and k < d:
+                signal_strength = min(100.0, signal_strength + 10)
+                explanation += f"KDJ死叉，增强卖出信号。"
+        
+        logger.info(f"信号预测完成: {signal}, 强度={signal_strength:.1f}, 置信度={confidence:.2f}")
+        
+        return SignalPrediction(
+            model_id=model_id,
+            stock_code=stock_code,
+            signal=signal,
+            signal_strength=round(signal_strength, 1),
+            confidence=round(confidence, 2),
+            current_price=current_price,
+            predicted_price=predicted_price,
+            predicted_change_percent=predicted_change_percent,
+            prediction_date=datetime.now(),
+            signal_explanation=explanation,
+            technical_indicators=tech_indicators
+        )
     
     def get_models(self, stock_code: Optional[str] = None) -> List[MLModel]:
         query = select(MLModel)

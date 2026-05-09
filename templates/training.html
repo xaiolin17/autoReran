@@ -37,6 +37,13 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <label>训练模式</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="trainingMode" value="regression" checked> 价格预测（回归）</label>
+                            <label><input type="radio" name="trainingMode" value="classification"> 涨跌判断（分类）</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label for="trainSize">训练集比例</label>
                         <input type="number" id="trainSize" value="0.8" min="0.5" max="0.95" step="0.05">
                     </div>
@@ -54,7 +61,7 @@
         </div>
 
         <div class="prediction-section">
-            <h2>价格预测</h2>
+            <h2>🔮 AI 信号预测</h2>
             <div class="prediction-controls">
                 <div class="control-group">
                     <label for="predictModel">选择模型</label>
@@ -66,7 +73,8 @@
                     <label for="predictStock">股票代码</label>
                     <input type="text" id="predictStock" value="SAMPLE">
                 </div>
-                <button id="predictBtn" class="btn btn-primary">预测</button>
+                <button id="predictBtn" class="btn btn-primary">价格预测</button>
+                <button id="predictSignalBtn" class="btn btn-success">信号预测</button>
             </div>
             <div id="predictionResult" class="prediction-result" style="display: none;"></div>
         </div>
