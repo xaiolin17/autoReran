@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 from functools import lru_cache
 
 
@@ -33,6 +33,29 @@ class Settings(BaseSettings):
     
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_PER_HOUR: int = 1000
+    
+    BACKUP_DIR: str = "backups"
+    BACKUP_RETENTION_DAYS: int = 30
+    
+    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ALLOW_METHODS: List[str] = ["*"]
+    CORS_ALLOW_HEADERS: List[str] = ["*"]
+    
+    CSRF_ENABLED: bool = False
+    CSRF_SECRET_KEY: Optional[str] = None
+    
+    CSP_ENABLED: bool = True
+    CSP_DIRECTIVES: dict = {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: https:",
+    }
     
     class Config:
         env_file = ".env"
