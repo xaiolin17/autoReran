@@ -4,6 +4,8 @@ from app.api.v1.endpoints import ml
 from app.api.v1.endpoints import backtest
 from app.api.v1.endpoints import scheduler
 from app.api.v1.endpoints import sample_data
+from app.api.v1.endpoints import cache
+from app.api.v1.endpoints import auth
 
 __all__ = [
     "stocks",
@@ -11,5 +13,7 @@ __all__ = [
     "ml",
     "backtest",
     "scheduler",
-    "sample_data"
+    "sample_data",
+    "cache",
+    "auth"
 ]

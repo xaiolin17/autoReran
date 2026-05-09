@@ -2,231 +2,179 @@
 
 ## 概述
 
-本文档记录了股票数据分析平台在代码结构、性能、错误处理、安全性和用户体验等方面的优化改进。
+本文档记录了股票数据分析平台在代码结构、性能、错误处理、安全性和用户体验等方面的优化改进，包括最新的生产级升级。
 
 ---
 
 ## 1. 代码结构改进
 
-### 1.1 移除死代码
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| 安全模块 | 存在 `app/core/security.py`，但未被使用，且依赖不存在的配置 | ✅ 已移除，避免依赖问题 |
+### 1.1 安全模块改进
+| 项目 | 之前状态 | 当前状态 |
+|------|---------|---------|
+| 安全模块 | 移除未使用的 `security.py` | ✅ **重新实现**完整的认证系统，包含 JWT、密码哈希 |
 
 ### 1.2 配置管理改进
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| 配置类 | 基础配置，缺少缓存机制 | ✅ 使用 `@lru_cache()` 缓存配置实例，添加 `DEBUG`、`MODELS_DIR`、`LOG_LEVEL`、`LOG_FILE` 配置 |
-| 配置访问 | 直接实例化 `Settings()` | ✅ 使用 `get_settings()` 单例模式 |
+| 项目 | 之前状态 | 当前状态 |
+|------|---------|---------|
+| 配置类 | 基础配置 | ✅ **扩展配置包括：JWT 配置（SECRET_KEY、ALGORITHM、ACCESS_TOKEN_EXPIRE_MINUTES）、Celery 配置（CELERY_BROKER_URL、CELERY_RESULT_BACKEND） |
 
 ### 1.3 新增核心模块
 | 模块 | 功能 |
 |------|------|
-| `app/core/logger.py` | 统一的日志系统，支持控制台和文件输出 |
+| `app/core/security.py` | JWT 令牌生成/验证、密码哈希 |
+| `app/core/celery_app.py` | Celery 应用配置 |
+| `app/models/user.py` | 用户数据库模型 |
+| `app/schemas/user.py` | 用户 Pydantic 模型 |
+| `app/services/user_service.py` | 用户业务逻辑 |
+| `app/api/v1/endpoints/auth.py` | 认证 API 端点 |
+| `app/tasks/stock_tasks.py` | Celery 异步任务 |
 
 ---
 
-## 2. 数据库性能优化
+## 2. 数据库改进
 
-### 2.1 索引优化
-| 模型 | 优化前 | 优化后 |
-|------|--------|--------|
-| `StockData` | 基础索引 | ✅ 添加复合唯一索引 `(stock_code, period, datetime)`，大幅提升查询速度 |
-
-### 2.2 查询优化
-| 服务 | 优化前 | 优化后 |
-|------|--------|--------|
-| `StockService` | 使用 `query.filter().all()` 模式 | ✅ 使用 SQLAlchemy 2.0 风格的 `select()` API |
-| 数据保存 | 逐行检查存在性，N+1 查询问题 | ✅ 批量查询已存在记录，过滤后批量插入 |
-
-### 2.3 批量操作
-| 操作 | 优化前 | 优化后 |
-|------|--------|--------|
-| 保存股票数据 | 逐行 `add()` + `commit()` | ✅ `bulk_save_objects()` 批量保存 |
-| 获取单条记录 | `query.filter().first()` | ✅ `db.get()` 更高效 |
-
----
-
-## 3. 错误处理改进
-
-### 3.1 全局异常处理
-| 特性 | 优化前 | 优化后 |
-|------|--------|--------|
-| 异常捕获 | 无统一处理 | ✅ 全局异常处理器，区分 `HTTPException`、`SQLAlchemyError`、通用异常 |
-| 错误响应 | 原始错误信息 | ✅ 统一 JSON 格式响应，生产环境隐藏敏感细节 |
-
-### 3.2 应用生命周期
-| 事件 | 优化前 | 优化后 |
-|------|--------|--------|
-| 启动 | 无日志 | ✅ 记录应用启动日志 |
-| 关闭 | 无日志 | ✅ 记录应用关闭日志 |
-
----
-
-## 4. 日志系统
-
-### 4.1 新增日志功能
-| 模块 | 日志记录 |
-|------|----------|
-| `StockService` | 数据获取、保存操作记录 |
-| `MLService` | 模型训练、预测、删除操作记录 |
-| `BacktestService` | 回测执行、结果删除记录 |
-| `IndicatorService` | 调试级别的指标计算记录 |
-
-### 4.2 日志级别
-- `DEBUG`: 详细的调试信息
-- `INFO`: 一般业务流程记录
-- `WARNING`: 警告信息
-- `ERROR`: 错误信息
-
----
-
-## 5. 代码可维护性提升
-
-### 5.1 Pydantic v2 兼容性
-| 文件 | 优化前 | 优化后 |
-|------|--------|--------|
-| 所有 schemas/services | `.dict()` | ✅ `.model_dump()` (Pydantic v2 标准) |
-
-### 5.2 代码组织
-| 改进 | 说明 |
+### 2.1 多数据库支持
+| 特性 | 之前 | 现在 |
 |------|------|
-| 私有方法 | 将内部方法标记为 `_` 前缀（如 `_get_existing_records`） |
-| 职责分离 | 服务层代码更清晰，数据库操作与业务逻辑分离 |
+| 数据库 | 仅 SQLite | ✅ **双数据库支持**：SQLite (开发) / PostgreSQL (生产) |
+| 连接池 | 无 | ✅ **连接池配置**：QueuePool、pool_pre_ping 等生产配置 |
 
----
-
-## 6. 前端用户体验优化
-
-### 6.1 加载状态
-| 特性 | 优化前 | 优化后 |
-|------|--------|--------|
-| 加载指示 | 无视觉反馈 | ✅ 加载动画 + 半透明遮罩 |
-| 按钮状态 | 无防止重复点击 | ✅ 禁用指针事件防止重复提交 |
-
-### 6.2 用户反馈
-| 特性 | 优化前 | 优化后 |
-|------|--------|--------|
-| 成功/错误提示 | `alert()` 弹窗 | ✅ 优雅的右上角滑入提示，3秒自动消失 |
-| 消息类型 | 单一风格 | ✅ 4种类型：info、success、error、warning，不同颜色 |
-
-### 6.3 交互体验
-| 特性 | 优化前 | 优化后 |
-|------|--------|--------|
-| 输入验证 | 无 | ✅ 股票代码非空验证 |
-| 信号卡片 | 无悬停效果 | ✅ 悬停上浮 + 阴影效果 |
-| 按钮交互 | 无状态变化 | ✅ hover/active 状态动画 |
-
----
-
-## 7. API 响应格式统一
-
-### 7.1 健康检查
-```javascript
-// 优化前
-{ "status": "ok", "message": "..." }
-
-// 优化后
-{ "success": true, "message": "..." }
-```
-
-### 7.2 示例数据生成
-```javascript
-// 优化前
-{ "message": "...", "stock_code": "..." }
-
-// 优化后
-{ "success": true, "message": "...", "stock_code": "...", "count": 365 }
-```
-
----
-
-## 8. 文件变更清单
-
-### 新增文件
-- `app/core/logger.py` - 日志系统
-- `ANALYSIS.md` - 项目分析文档
-- `COMPARISON.md` - 本文档
-
-### 修改文件
-- `app/main.py` - 添加全局异常处理、生命周期事件
-- `app/core/config.py` - 完善配置管理
-- `app/models/stock_data.py` - 添加复合索引
-- `app/services/stock_service.py` - 批量操作、日志、SQLAlchemy 2.0 API
-- `app/services/ml_service.py` - 日志、SQLAlchemy 2.0 API、配置改进
-- `app/services/backtest_service.py` - 日志、SQLAlchemy 2.0 API
-- `app/services/indicator_service.py` - 添加日志
-- `app/api/v1/endpoints/sample_data.py` - 批量操作、日志、统一响应
-- `static/js/main.js` - 加载状态、消息提示、交互优化
-
-### 删除文件
-- `app/core/security.py` - 未使用的安全模块
-
----
-
-## 9. 性能提升预期
-
-| 场景 | 优化前 | 优化后 | 提升 |
-|------|--------|--------|------|
-| 保存365条股票数据 | ~365次数据库往返 | ~2次数据库往返 | **~180x** |
-| 查询特定股票数据 | 全表扫描 | 索引扫描 | **~10-100x** |
-| 前端操作反馈 | 无指示，用户困惑 | 即时反馈 | 用户体验显著提升 |
-
----
-
-## 11. 缓存优化
-
-### 11.1 新增缓存模块
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| 缓存系统 | 无缓存 | 新增 `app/core/cache.py`，实现 LRU 缓存、内存缓存管理、TTL 过期机制 |
-
-### 11.2 配置项新增
-| 配置项 | 说明 |
-|--------|------|
-| `CACHE_ENABLED` | 是否启用缓存 |
-| `CACHE_MAXSIZE` | 最大缓存条目数 |
-| `CACHE_DEFAULT_TTL` | 默认过期时间（秒） |
-| `CACHE_STOCK_DATA_TTL` | 股票数据缓存时间（秒） |
-| `CACHE_INDICATOR_TTL` | 指标数据缓存时间（秒） |
-
-### 11.3 服务层缓存
-| 服务 | 优化前 | 优化后 |
-|------|--------|--------|
-| `StockService.get_stock_data` | 每次查询数据库 | 缓存查询结果，支持按股票代码和周期清除 |
-| `StockService.to_dataframe` | 每次重新转换 | 缓存转换结果 |
-| `IndicatorService.get_stock_data_with_indicators` | 每次重新计算指标 | 缓存指标计算结果 |
-
-### 11.4 新增 API 端点
-| 端点 | 功能 |
+### 2.2 用户数据模型
+| 模型 | 说明 |
 |------|------|
-| `/api/v1/cache/stats` | 获取缓存统计信息 |
-| `/api/v1/cache/clear` | 清除所有缓存 |
-| `/api/v1/cache/clear/{pattern}` | 按模式清除缓存 |
-
-## 12. 性能提升
-
-| 场景 | 优化前 | 优化后 | 提升 |
-|------|--------|--------|------|
-| 重复查询股票数据 | 每次查询数据库 | 缓存命中，直接返回 | **5-100x** |
-| 重复计算技术指标 | 每次重新计算 | 缓存命中，直接返回 | **10-100x** |
-| 热点 API 响应 | 数据库查询 + 计算 | 缓存返回 | **显著提升** |
-
-## 13. 后续建议
-
-### 短期优化
-1. 添加单元测试和集成测试
-2. 使用 Alembic 管理数据库迁移
-3. 添加请求限流防止滥用
-4. 考虑使用 Redis 替代内存缓存（分布式场景）
-
-### 长期规划
-1. 考虑使用 PostgreSQL 替换 SQLite（生产环境）
-2. 实现异步任务队列（Celery）处理耗时操作
-3. 添加用户认证和授权系统
-4. 前端考虑使用 Vue/React 框架重写
-
+| `User` | 用户表，支持 email、username、hashed_password、is_active、is_superuser、创建/更新时间 |
 
 ---
 
-*优化完成日期: 2026-05-09*
+## 3. 认证与授权
+
+### 3.1 用户认证系统
+| 特性 | 之前 | 现在 |
+|------|------|
+| 用户管理 | 无 | ✅ **完整实现** |
+| API 端点 | - | ✅ `/api/v1/auth/register` - 用户注册 |
+| API 端点 | - | ✅ `/api/v1/auth/login` - 用户登录，返回 JWT |
+| API 端点 | - | ✅ `/api/v1/auth/me` - 获取当前用户 |
+| 密码安全 | - | ✅ **bcrypt 哈希** |
+| 令牌认证 | - | ✅ **JWT Bearer Token** |
+| 依赖注入 | - | ✅ `get_current_user`、`get_current_active_user` |
+
+---
+
+## 4. 异步任务处理
+
+### 4.1 Celery 任务队列
+| 特性 | 之前 | 现在 |
+|------|------|
+| 任务处理 | 同步执行 | ✅ **Celery + Redis 异步任务队列 |
+| 示例任务 | - | ✅ `fetch_stock_data_task` - 异步获取股票数据 |
+| 示例任务 | - | ✅ `train_model_task` - 异步训练 ML 模型 |
+| 示例任务 | - | ✅ `run_backtest_task` - 异步执行回测 |
+| 任务重试 | - | ✅ 支持任务失败自动重试机制 |
+
+---
+
+## 5. 部署与容器化
+
+### 5.1 Docker 容器化
+| 项目 | 之前 | 现在 |
+|------|------|
+| 容器化 | 无 | ✅ **完整 Docker 支持** |
+| Dockerfile | - | ✅ Python 3.11-slim 基础镜像，生产级配置 |
+| docker-compose.yml | - | ✅ 包含 Web、Celery Worker、Celery Beat、PostgreSQL、Redis |
+| 环境变量 | - | ✅ `.env.example` 完整模板 |
+
+### 5.2 部署文档
+| 文档 | 说明 |
+|------|------|
+| `DEPLOYMENT.md` | ✅ 完整部署指南：Docker Compose、手动部署、生产环境配置 |
+| `FRONTEND_ARCH.md` | ✅ Vue.js 和 React 前端架构规划 |
+
+---
+
+## 6. 依赖更新
+
+### 6.1 requirements.txt 更新
+| 新增依赖 | 版本 | 用途 |
+|---------|------|------|
+| `psycopg2-binary` | ~2.9.9 | PostgreSQL 驱动 |
+| `celery` | ~5.3.6 | 异步任务队列 |
+| `redis` | ~5.0.1 | Redis 客户端 |
+| `python-jose[cryptography]` | ~3.3.0 | JWT 处理 |
+| `passlib[bcrypt]` | ~1.7.4 | 密码哈希 |
+
+---
+
+## 7. 架构升级详情
+
+### 7.1 文件变更清单
+
+#### 新增文件
+- `app/core/security.py` - JWT 认证和密码哈希
+- `app/core/celery_app.py` - Celery 配置
+- `app/models/user.py` - 用户数据模型
+- `app/schemas/user.py` - 用户 Pydantic schemas
+- `app/services/user_service.py` - 用户业务逻辑
+- `app/api/v1/endpoints/auth.py` - 认证 API
+- `app/tasks/__init__.py` - 任务模块初始化
+- `app/tasks/stock_tasks.py` - 异步任务实现
+- `docker-compose.yml` - Docker Compose 配置
+- `Dockerfile` - Docker 镜像配置
+- `.env.example` - 环境变量模板
+- `DEPLOYMENT.md` - 部署指南
+- `FRONTEND_ARCH.md` - 前端架构规划
+
+#### 修改文件
+- `requirements.txt` - 添加新依赖
+- `app/core/config.py` - 扩展配置项
+- `app/core/database.py` - 双数据库支持、连接池
+- `app/api/deps.py` - 修复依赖项、更新 TokenData 导入
+- `app/api/v1/__init__.py` - 添加认证路由
+- `app/api/v1/endpoints/__init__.py` - 导出认证端点
+- `app/models/__init__.py` - 导出用户模型
+- `app/schemas/__init__.py` - 导出用户 schemas
+- `app/services/__init__.py` - 导出用户服务
+
+---
+
+## 8. 生产级特性总结
+
+| 特性 | 状态 |
+|------|------|
+| 生产数据库支持 | ✅ PostgreSQL 支持 |
+| 用户认证 | ✅ JWT 认证 |
+| 密码安全 | ✅ bcrypt 哈希 |
+| 异步任务 | ✅ Celery + Redis |
+| 容器化部署 | ✅ Docker Compose |
+| 部署文档 | ✅ 完整指南 |
+| 前端规划 | ✅ Vue/React 方案 |
+| 环境管理 | ✅ 完整配置 |
+| 日志系统 | ✅ 已实现 |
+| 缓存系统 | ✅ 已实现 |
+| 错误处理 | ✅ 已实现 |
+
+---
+
+## 9. 后续发展建议
+
+### 短期
+1. 添加 Alembic 数据库迁移
+2. 添加单元测试和集成测试
+3. 添加请求限流
+4. 部署 HTTPS 配置
+
+### 中期
+1. 实现 OAuth2.0 社交登录
+2. WebSocket 实时数据推送
+3. 完整的前端重构 (Vue/React)
+4. 完善权限管理 (RBAC)
+
+### 长期
+1. 多租户支持
+2. 实时监控和告警
+3. 机器学习模型管理系统
+4. A/B 测试框架
+
+---
+
+*最新升级日期: 2026-05-09*
