@@ -4,12 +4,16 @@ import pandas as pd
 from app.services.stock_service import StockService
 from app.utils.technical_indicators import TechnicalIndicators
 from app.core.logger import logger
+from app.core.config import settings
+from app.core.cache import get_cache, make_cache_key
 
 
 class IndicatorService:
     def __init__(self, db: Session):
         self.db = db
         self.stock_service = StockService(db)
+        self.cache_enabled = settings.CACHE_ENABLED
+        self.cache_ttl = settings.CACHE_INDICATOR_TTL
     
     def get_stock_data_with_indicators(
         self,
@@ -19,6 +23,14 @@ class IndicatorService:
         end_date: Optional[str] = None,
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
+        if self.cache_enabled:
+            cache = get_cache()
+            key = f"indicator:get_stock_data_with_indicators:{make_cache_key(stock_code, period, str(start_date), str(end_date), limit)}"
+            cached = cache.get(key)
+            if cached is not None:
+                logger.debug(f"缓存命中: get_stock_data_with_indicators {stock_code}")
+                return cached
+        
         logger.debug(f"获取带指标的股票数据: {stock_code}")
         
         stock_data = self.stock_service.get_stock_data(
@@ -55,6 +67,10 @@ class IndicatorService:
             result.append(item)
         
         logger.debug(f"返回带指标数据: {len(result)}条")
+        
+        if self.cache_enabled:
+            cache = get_cache()
+            cache.set(key, result, self.cache_ttl)
         
         return result
     

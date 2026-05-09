@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional, List
 from functools import lru_cache
 
 
@@ -14,15 +15,49 @@ class Settings(BaseSettings):
     EASTMONEY_OPTION_CHAIN_URL: str = "https://push2.eastmoney.com/api/qt/official/stock/ls"
     EASTMONEY_OPTION_QUOTE_URL: str = "https://push2.eastmoney.com/api/qt/stock/details/get"
     
+    SCHEDULER_ENABLED: bool = True
+    CRAWL_INTERVAL_MINUTES: int = 5
+    
     MODELS_DIR: str = "models"
     
     LOG_LEVEL: str = "INFO"
-    LOG_FILE: str | None = None
+    LOG_FILE: Optional[str] = None
     
-    CORS_ORIGINS: list[str] = ["*"]
+    CACHE_ENABLED: bool = True
+    CACHE_MAXSIZE: int = 1024
+    CACHE_DEFAULT_TTL: int = 300
+    CACHE_STOCK_DATA_TTL: int = 300
+    CACHE_INDICATOR_TTL: int = 600
+    
+    SECRET_KEY: str = "your-secret-key-change-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_PER_HOUR: int = 1000
+    
+    BACKUP_DIR: str = "backups"
+    BACKUP_RETENTION_DAYS: int = 30
+    
+    CORS_ORIGINS: List[str] = ["*"]
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ["*"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
+    CORS_ALLOW_METHODS: List[str] = ["*"]
+    CORS_ALLOW_HEADERS: List[str] = ["*"]
+    
+    CSRF_ENABLED: bool = False
+    CSRF_SECRET_KEY: Optional[str] = None
+    
+    CSP_ENABLED: bool = True
+    CSP_DIRECTIVES: dict = {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-inline'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: https:",
+    }
     
     class Config:
         env_file = ".env"
