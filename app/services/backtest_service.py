@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import select, desc
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import pandas as pd
@@ -8,6 +9,7 @@ from app.schemas.backtest import BacktestResultCreate, BacktestRequest
 from app.services.stock_service import StockService
 from app.services.indicator_service import IndicatorService
 from app.utils.technical_indicators import TechnicalIndicators
+from app.core.logger import logger
 
 
 class BacktestService:
@@ -17,6 +19,8 @@ class BacktestService:
         self.indicator_service = IndicatorService(db)
     
     def run_backtest(self, request: BacktestRequest) -> BacktestResult:
+        logger.info(f"开始回测: 股票={request.stock_code}, 策略={request.strategy_name}")
+        
         stock_data = self.stock_service.get_stock_data(request.stock_code, "1d")
         
         if len(stock_data) < 100:
@@ -37,6 +41,8 @@ class BacktestService:
         
         backtest_result = self._execute_trades(df, signals, request.initial_capital)
         
+        logger.info(f"回测完成: 收益率={backtest_result['total_return']:.2f}%, 最大回撤={backtest_result['max_drawdown']:.2f}%")
+        
         db_result = BacktestResultCreate(
             stock_code=request.stock_code,
             strategy_name=request.strategy_name,
@@ -55,7 +61,7 @@ class BacktestService:
             notes=f"Backtest for {request.stock_code} using {request.strategy_name}"
         )
         
-        db_backtest = BacktestResult(**db_result.dict())
+        db_backtest = BacktestResult(**db_result.model_dump())
         db_backtest.created_at = datetime.now()
         
         self.db.add(db_backtest)
@@ -218,18 +224,21 @@ class BacktestService:
         }
     
     def get_backtests(self, stock_code: Optional[str] = None) -> List[BacktestResult]:
-        query = self.db.query(BacktestResult)
+        query = select(BacktestResult)
         if stock_code:
-            query = query.filter(BacktestResult.stock_code == stock_code)
-        return query.order_by(BacktestResult.created_at.desc()).all()
+            query = query.where(BacktestResult.stock_code == stock_code)
+        query = query.order_by(desc(BacktestResult.created_at))
+        
+        return self.db.execute(query).scalars().all()
     
     def get_backtest(self, backtest_id: int) -> Optional[BacktestResult]:
-        return self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
+        return self.db.get(BacktestResult, backtest_id)
     
     def delete_backtest(self, backtest_id: int) -> bool:
-        db_backtest = self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
+        db_backtest = self.db.get(BacktestResult, backtest_id)
         if db_backtest:
             self.db.delete(db_backtest)
             self.db.commit()
+            logger.info(f"删除回测结果: {backtest_id}")
             return True
         return False

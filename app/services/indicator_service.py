@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 import pandas as pd
 from app.services.stock_service import StockService
 from app.utils.technical_indicators import TechnicalIndicators
+from app.core.logger import logger
 
 
 class IndicatorService:
@@ -18,11 +19,14 @@ class IndicatorService:
         end_date: Optional[str] = None,
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
+        logger.debug(f"获取带指标的股票数据: {stock_code}")
+        
         stock_data = self.stock_service.get_stock_data(
             stock_code, period, start_date, end_date, limit
         )
         
         if not stock_data:
+            logger.warning(f"无股票数据: {stock_code}")
             return []
         
         df = self.stock_service.to_dataframe(stock_data)
@@ -50,6 +54,7 @@ class IndicatorService:
             
             result.append(item)
         
+        logger.debug(f"返回带指标数据: {len(result)}条")
         return result
     
     def calculate_indicators_for_df(self, df: pd.DataFrame) -> pd.DataFrame:
