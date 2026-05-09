@@ -20,8 +20,9 @@
 
         <div class="controls">
             <div class="control-group">
-                <label for="stockCode">股票代码</label>
-                <input type="text" id="stockCode" value="SAMPLE" placeholder="输入股票代码">
+                <label for="stockCode">股票/ETF代码</label>
+                <input type="text" id="stockCode" value="510300" placeholder="输入股票/ETF代码 (如: 510300, 510500, 510050, 000001, 600000)">
+                <small style="color: var(--text-tertiary); font-size: 12px; margin-top: 4px;">支持期权标的: 510300(沪深300ETF), 510500(中证500ETF), 510050(上证50ETF)</small>
             </div>
             <div class="control-group">
                 <button id="fetchBtn" class="btn btn-primary">获取数据</button>

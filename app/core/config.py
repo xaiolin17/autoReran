@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     
     SINA_STOCK_URL: str = "https://hq.sinajs.cn/list="
     EASTMONEY_URL: str = "https://push2.eastmoney.com/api/qt/stock/kline/get"
+    EASTMONEY_OPTION_CHAIN_URL: str = "https://push2.eastmoney.com/api/qt/official/stock/ls"
+    EASTMONEY_OPTION_QUOTE_URL: str = "https://push2.eastmoney.com/api/qt/stock/details/get"
     
     SCHEDULER_ENABLED: bool = True
     CRAWL_INTERVAL_MINUTES: int = 5

@@ -315,6 +315,24 @@ function displayOptionChain(data) {
     const puts = data.puts || [];
     const stockPrice = data.stock_price || 0;
     
+    // 如果没有期权数据，显示友好提示
+    if (calls.length === 0 && puts.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="19">
+                    <div class="empty-state" style="padding: 40px;">
+                        <span class="empty-state-icon">📊</span>
+                        <p>暂无期权数据，或该标的暂无期权交易</p>
+                        <p style="font-size: 14px; color: var(--text-secondary); margin-top: 10px;">
+                            💡 提示: 请尝试期权标的: 510300(沪深300ETF), 510500(中证500ETF), 510050(上证50ETF)
+                        </p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
     // Group options by strike price
     const strikeMap = new Map();
     
