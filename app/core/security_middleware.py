@@ -1,12 +1,19 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from app.core.config import settings
 from app.core.logger import logger
+
+# 尝试导入速率限制库，如果不可用则提供空实现
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    SLOWAPI_AVAILABLE = True
+except ImportError:
+    SLOWAPI_AVAILABLE = False
+    logger.warning("SlowAPI not available, rate limiting will be disabled")
 
 
 def setup_cors(app: FastAPI):
@@ -20,14 +27,15 @@ def setup_cors(app: FastAPI):
 
 
 def setup_rate_limiter(app: FastAPI):
-    if settings.RATE_LIMIT_ENABLED:
-        limiter = Limiter(key_func=get_remote_address)
-        app.state.limiter = limiter
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-        logger.info("速率限制已启用")
-        return limiter
-    logger.info("速率限制未启用")
-    return None
+    if not SLOWAPI_AVAILABLE or not settings.RATE_LIMIT_ENABLED:
+        logger.info("速率限制未启用或不可用")
+        return None
+    
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    logger.info("速率限制已启用")
+    return limiter
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

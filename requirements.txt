@@ -4,9 +4,10 @@ uvicorn[standard]==0.34.0
 
 # Database
 sqlalchemy==2.0.37
-psycopg2-binary==2.9.10
-asyncpg==0.30.0
 sqlalchemy-utils==0.42.0
+# PostgreSQL (optional - uncomment if you need PostgreSQL)
+# psycopg2-binary==2.9.10
+# asyncpg==0.30.0
 
 # Data Validation
 pydantic==2.10.3
@@ -33,20 +34,20 @@ apscheduler==3.11.0
 # Configuration
 python-dotenv==1.0.1
 
-# Background Tasks
-celery==5.4.0
-redis==5.2.1
+# Background Tasks (optional - uncomment if you need Celery)
+# celery==5.4.0
+# redis==5.2.1
 
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
-# Monitoring
-prometheus-client==0.21.1
+# Monitoring (optional - uncomment if you need Prometheus)
+# prometheus-client==0.21.1
 
-# Rate Limiting
-slowapi==0.1.9
-limits==3.16.0
+# Rate Limiting (optional - uncomment if you need rate limiting)
+# slowapi==0.1.9
+# limits==3.16.0
 
 # WebSockets
 websockets==14.0
