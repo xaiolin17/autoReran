@@ -11,6 +11,7 @@ from app.crawlers.eastmoney import EastMoneyCrawler
 from app.crawlers.data_processor import DataProcessor
 from app.core.logger import logger
 from app.core.config import settings
+from app.core.cache import get_cache, make_cache_key, invalidate_cache
 
 
 class StockService:
@@ -20,6 +21,8 @@ class StockService:
         self.eastmoney_crawler = EastMoneyCrawler()
         self.data_processor = DataProcessor()
         os.makedirs(settings.MODELS_DIR, exist_ok=True)
+        self.cache_enabled = settings.CACHE_ENABLED
+        self.cache_ttl = settings.CACHE_STOCK_DATA_TTL
     
     def get_stock_data(
         self,
@@ -29,6 +32,14 @@ class StockService:
         end_date: Optional[datetime] = None,
         limit: Optional[int] = None
     ) -> List[StockData]:
+        if self.cache_enabled:
+            cache = get_cache()
+            key = f"stock:get_stock_data:{make_cache_key(stock_code, period, str(start_date), str(end_date), limit)}"
+            cached = cache.get(key)
+            if cached is not None:
+                logger.debug(f"缓存命中: get_stock_data {stock_code}")
+                return cached
+        
         query = select(StockData).where(
             StockData.stock_code == stock_code,
             StockData.period == period
@@ -46,6 +57,11 @@ class StockService:
         
         result = self.db.execute(query).scalars().all()
         logger.info(f"获取股票 {stock_code} 数据: {len(result)} 条")
+        
+        if self.cache_enabled:
+            cache = get_cache()
+            cache.set(key, result, self.cache_ttl)
+        
         return result
     
     def create_stock_data(self, stock_data: StockDataCreate) -> StockData:
@@ -54,6 +70,10 @@ class StockService:
         self.db.commit()
         self.db.refresh(db_stock)
         logger.debug(f"创建股票数据: {stock_data.stock_code}")
+        
+        if self.cache_enabled:
+            invalidate_cache(f"stock:get_stock_data:{stock_data.stock_code}")
+        
         return db_stock
     
     def fetch_and_save_stock_data(
@@ -91,7 +111,7 @@ class StockService:
         existing_records = self._get_existing_records(stock_code, period, cleaned_data)
         new_records = self._filter_new_records(cleaned_data, existing_records)
         
-        saved_stocks = self._bulk_insert_stock_data(new_records)
+        saved_stocks = self._bulk_insert_stock_data(new_records, stock_code, period)
         logger.info(f"保存股票 {stock_code} 数据: {len(saved_stocks)} 条新记录")
         
         return saved_stocks
@@ -109,7 +129,7 @@ class StockService:
     def _filter_new_records(self, df: pd.DataFrame, existing_datetimes: set) -> pd.DataFrame:
         return df[~df['datetime'].isin(existing_datetimes)]
     
-    def _bulk_insert_stock_data(self, df: pd.DataFrame) -> List[StockData]:
+    def _bulk_insert_stock_data(self, df: pd.DataFrame, stock_code: str, period: str) -> List[StockData]:
         if df.empty:
             return []
         
@@ -133,6 +153,10 @@ class StockService:
         self.db.bulk_save_objects(stocks)
         self.db.commit()
         
+        if self.cache_enabled:
+            invalidate_cache(f"stock:get_stock_data:{stock_code}")
+            invalidate_cache(f"stock:to_dataframe:{stock_code}")
+        
         return stocks
     
     def get_latest_stock_data(self, stock_code: str, period: str = "1d") -> Optional[StockData]:
@@ -152,6 +176,16 @@ class StockService:
         if not stock_data_list:
             return pd.DataFrame()
         
+        if self.cache_enabled:
+            cache = get_cache()
+            stock_code = stock_data_list[0].stock_code if stock_data_list else "none"
+            period = stock_data_list[0].period if stock_data_list else "none"
+            key = f"stock:to_dataframe:{make_cache_key(stock_code, period, len(stock_data_list))}"
+            cached = cache.get(key)
+            if cached is not None:
+                logger.debug(f"缓存命中: to_dataframe {stock_code}")
+                return cached
+        
         data = []
         for stock in stock_data_list:
             data.append({
@@ -170,4 +204,9 @@ class StockService:
         
         df = pd.DataFrame(data)
         df = df.sort_values('datetime').reset_index(drop=True)
+        
+        if self.cache_enabled:
+            cache = get_cache()
+            cache.set(key, df, self.cache_ttl)
+        
         return df

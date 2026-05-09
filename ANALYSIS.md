@@ -163,4 +163,61 @@
 
 ---
 
+## 缓存系统设计说明
+
+### 1. 架构设计
+
+#### 1.1 核心组件
+- **LRUCache 类**: 实现 LRU (Least Recently Used) 缓存算法
+- **CacheEntry 类**: 封装缓存值和 TTL 信息
+- **全局缓存实例**: 通过 `get_cache()` 函数获取单例
+
+#### 1.2 关键特性
+- **LRU 淘汰策略**: 当缓存满时，删除最久未使用的条目
+- **TTL 过期机制**: 支持为每个缓存条目设置过期时间
+- **按模式清除**: 支持按键的模式批量清除缓存
+- **统计信息**: 提供命中率、缓存大小等统计数据
+
+### 2. 缓存键设计
+
+缓存键格式: `{prefix}:{function_name}:{hash_of_params}`
+
+- **股票数据**: `stock:get_stock_data:{hash(stock_code, period, start_date, end_date, limit)}`
+- **DataFrame**: `stock:to_dataframe:{hash(stock_code, period, count)}`
+- **指标数据**: `indicator:get_stock_data_with_indicators:{hash(stock_code, period, ...)}`
+
+### 3. 缓存失效策略
+
+#### 3.1 主动失效
+- 数据更新时 (如 `create_stock_data`、`fetch_and_save_stock_data`) 清除相关缓存
+- 使用 `invalidate_cache(pattern)` 按股票代码清除相关缓存
+
+#### 3.2 被动失效
+- TTL 过期自动失效
+- LRU 淘汰旧条目
+
+### 4. 配置项
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| CACHE_ENABLED | True | 是否启用缓存 |
+| CACHE_MAXSIZE | 1024 | 最大缓存条目数 |
+| CACHE_DEFAULT_TTL | 300 | 默认过期时间 (秒) |
+| CACHE_STOCK_DATA_TTL | 300 | 股票数据缓存时间 (秒) |
+| CACHE_INDICATOR_TTL | 600 | 指标数据缓存时间 (秒) |
+
+### 5. API 管理端点
+
+- `GET /api/v1/cache/stats`: 获取缓存统计信息
+- `POST /api/v1/cache/clear`: 清除所有缓存
+- `POST /api/v1/cache/clear/{pattern}`: 按模式清除缓存
+
+### 6. 向后兼容
+
+- 缓存系统完全可选，通过 `CACHE_ENABLED` 配置开关
+- 原有代码无需修改即可正常工作
+- 缓存失效机制确保数据一致性
+
+---
+
 *本分析报告基于代码审查生成，优化工作将随后进行。*

@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FILE: Optional[str] = None
     
+    CACHE_ENABLED: bool = True
+    CACHE_MAXSIZE: int = 1024
+    CACHE_DEFAULT_TTL: int = 300
+    CACHE_STOCK_DATA_TTL: int = 300
+    CACHE_INDICATOR_TTL: int = 600
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
