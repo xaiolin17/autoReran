@@ -55,7 +55,11 @@
             <div class="list-card">
                 <h2>已训练模型</h2>
                 <div id="modelsList" class="models-list">
-                    <p class="empty-state">暂无模型</p>
+                    <div class="empty-state">
+                        <span class="empty-state-icon">🤖</span>
+                        <p>还没有训练模型，<strong>先在左侧填写信息开始训练</strong>！</p>
+                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">💡 提示：先确保已有股票数据存在</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -85,7 +89,10 @@
                 <div class="control-group">
                     <label>选择模型（可多选）</label>
                     <div id="ensembleModelsList" class="checkbox-group">
-                        <p style="color: #a0aec0; font-size: 13px;">请先训练模型</p>
+                        <div class="empty-state" style="padding: 30px 20px;">
+                            <span class="empty-state-icon" style="font-size: 36px;">📊</span>
+                            <p style="font-size: 14px;">请先训练至少1个模型才能进行综合预测</p>
+                        </div>
                     </div>
                 </div>
                 <div class="control-group">

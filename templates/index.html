@@ -54,7 +54,11 @@
         <div class="signals-section">
             <h2>交易信号</h2>
             <div id="signalsContainer" class="signals-container">
-                <p class="empty-state">暂无交易信号</p>
+                <div class="empty-state">
+                    <span class="empty-state-icon">📊</span>
+                    <p>还没有交易数据，<strong>先获取或生成示例数据</strong>开始体验！</p>
+                    <span class="empty-state-action" onclick="generateSampleData()">立即生成示例数据</span>
+                </div>
             </div>
         </div>
     </div>
