@@ -78,6 +78,31 @@
             </div>
             <div id="predictionResult" class="prediction-result" style="display: none;"></div>
         </div>
+
+        <div class="prediction-section">
+            <h2>🧩 多模型综合预测</h2>
+            <div class="prediction-controls">
+                <div class="control-group">
+                    <label>选择模型（可多选）</label>
+                    <div id="ensembleModelsList" class="checkbox-group">
+                        <p style="color: #a0aec0; font-size: 13px;">请先训练模型</p>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="ensembleStock">股票代码</label>
+                    <input type="text" id="ensembleStock" value="SAMPLE">
+                </div>
+                <div class="control-group">
+                    <label>综合方法</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="ensembleMethod" value="voting" checked> 投票制</label>
+                        <label><input type="radio" name="ensembleMethod" value="weighted"> 加权制</label>
+                    </div>
+                </div>
+                <button id="ensemblePredictBtn" class="btn btn-warning btn-large">开始综合预测</button>
+            </div>
+            <div id="ensembleResult" class="prediction-result" style="display: none;"></div>
+        </div>
     </div>
 
     <script src="/static/js/training.js"></script>

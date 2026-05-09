@@ -407,3 +407,90 @@ input:focus, select:focus {
     width: auto;
     padding: 0;
 }
+
+.btn-warning {
+    background: linear-gradient(135deg, #ed8936, #dd6b20);
+    color: white;
+}
+
+.btn-warning:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(237, 137, 54, 0.3);
+}
+
+.checkbox-group {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    cursor: pointer;
+    border-bottom: 1px solid #333a54;
+}
+
+.checkbox-item:last-child {
+    border-bottom: none;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-primary);
+}
+
+.checkbox-item span {
+    flex: 1;
+}
+
+.model-accuracy {
+    color: var(--text-secondary);
+    font-size: 12px;
+    background: rgba(0,255,136,0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.model-predictions-list {
+    display: grid;
+    gap: 12px;
+}
+
+.model-prediction-item {
+    background: var(--bg-secondary);
+    padding: 16px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 3px solid #333a54;
+}
+
+.model-prediction-signal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.small-signal-badge {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.signal-strength-text {
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.ensemble-card {
+    width: 100%;
+}

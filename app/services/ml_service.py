@@ -14,7 +14,15 @@ from sklearn.metrics import (
 import joblib
 import os
 from app.models.ml_model import MLModel
-from app.schemas.ml import MLModelCreate, TrainingRequest, SignalPrediction
+from app.schemas.ml import (
+    MLModelCreate,
+    TrainingRequest,
+    SignalPrediction,
+    EnsemblePredictionRequest,
+    EnsemblePredictionResponse,
+    ModelPredictionDetail,
+    ModelWeightConfig
+)
 from app.services.stock_service import StockService
 from app.utils.technical_indicators import TechnicalIndicators
 from app.core.logger import logger
@@ -356,6 +364,176 @@ class MLService:
             signal_explanation=explanation,
             technical_indicators=tech_indicators
         )
+
+    def ensemble_predict(self, request: EnsemblePredictionRequest) -> EnsemblePredictionResponse:
+        """
+        多模型综合预测
+        
+        支持两种方式：
+        - voting（投票制）：多数模型胜出
+        - weighted（加权制）：按权重和准确率综合
+        
+        Returns:
+            EnsemblePredictionResponse: 综合预测结果，包含各模型详情
+        """
+        logger.info(f"开始多模型综合预测: 模型数={len(request.model_ids)}, 方法={request.ensemble_method}")
+        
+        # 获取所有模型
+        models = []
+        for model_id in request.model_ids:
+            db_model = self.db.get(MLModel, model_id)
+            if not db_model:
+                logger.warning(f"模型不存在，跳过: {model_id}")
+                continue
+            models.append(db_model)
+        
+        if not models:
+            raise ValueError("没有找到可用的模型")
+        
+        # 获取权重配置
+        weight_map = {}
+        if request.model_weights:
+            weight_map = {w.model_id: w.weight for w in request.model_weights}
+        
+        # 对每个模型进行预测
+        all_predictions = []
+        current_price = 0.0
+        all_changes = []
+        
+        for db_model in models:
+            try:
+                # 单个模型预测
+                single_result = self.predict_signal(db_model.id, request.stock_code)
+                
+                if current_price == 0:
+                    current_price = single_result.current_price
+                
+                # 获取权重
+                weight = weight_map.get(db_model.id, 1.0)
+                
+                # 如果是加权模式，按准确率自动调整权重
+                if request.ensemble_method == "weighted" and not weight_map:
+                    weight = max(0.5, (db_model.accuracy or 0.5))  # 准确率作为权重
+                
+                # 收集预测详情
+                all_predictions.append(ModelPredictionDetail(
+                    model_id=db_model.id,
+                    model_name=db_model.model_name,
+                    model_type=db_model.model_type,
+                    accuracy=db_model.accuracy,
+                    signal=single_result.signal,
+                    signal_strength=single_result.signal_strength,
+                    confidence=single_result.confidence,
+                    weight=weight
+                ))
+                
+                # 收集预测的涨跌幅
+                if single_result.predicted_change_percent is not None:
+                    all_changes.append(single_result.predicted_change_percent)
+                
+            except Exception as e:
+                logger.warning(f"模型预测失败: {db_model.model_name} - {str(e)}")
+        
+        if not all_predictions:
+            raise ValueError("没有模型能够成功预测")
+        
+        # 统计信号分布
+        signal_counts = {"BUY": 0, "SELL": 0, "HOLD": 0}
+        signal_weighted_scores = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
+        
+        for pred in all_predictions:
+            signal_counts[pred.signal] += 1
+            weight = pred.weight or 1.0
+            signal_weighted_scores[pred.signal] += pred.signal_strength * weight
+        
+        # 确定最终信号
+        if request.ensemble_method == "weighted":
+            # 加权模式：找得分最高的信号
+            final_signal = max(signal_weighted_scores.items(), key=lambda x: x[1])[0]
+            max_score = max(signal_weighted_scores.values())
+            total_score = sum(signal_weighted_scores.values())
+            final_strength = (max_score / total_score) * 100 if total_score > 0 else 50.0
+        else:
+            # 投票模式：多数决定
+            final_signal = max(signal_counts.items(), key=lambda x: x[1])[0]
+            max_count = max(signal_counts.values())
+            final_strength = (max_count / len(all_predictions)) * 100
+        
+        # 计算综合置信度
+        total_confidence = sum(p.confidence * (p.weight or 1.0) for p in all_predictions)
+        total_weight = sum(p.weight or 1.0 for p in all_predictions)
+        avg_confidence = total_confidence / total_weight if total_weight > 0 else 0.5
+        
+        # 计算综合预测涨跌幅（如果有）
+        avg_change = sum(all_changes) / len(all_changes) if all_changes else None
+        
+        # 生成综合解释
+        explanation = self._generate_ensemble_explanation(
+            final_signal, signal_counts, signal_weighted_scores,
+            request.ensemble_method, len(all_predictions)
+        )
+        
+        logger.info(f"多模型综合预测完成: 最终信号={final_signal}, 强度={final_strength:.1f}%")
+        
+        return EnsemblePredictionResponse(
+            stock_code=request.stock_code,
+            final_signal=final_signal,
+            final_signal_strength=round(final_strength, 1),
+            confidence=round(avg_confidence, 2),
+            current_price=current_price,
+            predicted_change_percent=round(avg_change, 2) if avg_change is not None else None,
+            prediction_date=datetime.now(),
+            ensemble_method=request.ensemble_method,
+            model_predictions=all_predictions,
+            consensus_explanation=explanation,
+            signal_breakdown=signal_counts
+        )
+
+    def _generate_ensemble_explanation(
+        self,
+        final_signal: str,
+        signal_counts: Dict[str, int],
+        signal_weighted_scores: Dict[str, float],
+        ensemble_method: str,
+        model_count: int
+    ) -> str:
+        """生成综合预测的解释文本"""
+        explanation = []
+        
+        if ensemble_method == "voting":
+            explanation.append(f"基于 {model_count} 个模型投票决策。")
+            
+            buy_count = signal_counts.get("BUY", 0)
+            sell_count = signal_counts.get("SELL", 0)
+            hold_count = signal_counts.get("HOLD", 0)
+            
+            if final_signal == "BUY":
+                explanation.append(f"{buy_count} 个模型看多，{sell_count} 个看空，{hold_count} 个看平。")
+            elif final_signal == "SELL":
+                explanation.append(f"{sell_count} 个模型看空，{buy_count} 个看多，{hold_count} 个看平。")
+            else:
+                explanation.append("多数模型认为当前应观望。")
+        
+        else:  # weighted
+            explanation.append(f"基于 {model_count} 个模型加权决策。")
+            
+            total_score = sum(signal_weighted_scores.values())
+            buy_score = signal_weighted_scores.get("BUY", 0)
+            sell_score = signal_weighted_scores.get("SELL", 0)
+            
+            if final_signal == "BUY":
+                explanation.append(f"看多得分 {buy_score:.1f}，看空得分 {sell_score:.1f}。")
+            elif final_signal == "SELL":
+                explanation.append(f"看空得分 {sell_score:.1f}，看多得分 {buy_score:.1f}。")
+        
+        if final_signal == "BUY":
+            explanation.append("综合判断为做多信号。")
+        elif final_signal == "SELL":
+            explanation.append("综合判断为做空信号。")
+        else:
+            explanation.append("综合判断为观望信号。")
+        
+        return " ".join(explanation)
     
     def get_models(self, stock_code: Optional[str] = None) -> List[MLModel]:
         query = select(MLModel)

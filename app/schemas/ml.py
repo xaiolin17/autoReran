@@ -64,3 +64,45 @@ class SignalPrediction(BaseModel):
     prediction_date: datetime
     signal_explanation: str  # 信号解释
     technical_indicators: Optional[Dict[str, float]] = None  # 使用的技术指标值
+
+
+class ModelWeightConfig(BaseModel):
+    """单个模型的权重配置"""
+    model_id: int
+    weight: float = 1.0  # 权重，默认1.0
+
+
+class EnsemblePredictionRequest(BaseModel):
+    """多模型综合预测请求"""
+    model_ids: List[int]  # 要使用的模型ID列表
+    stock_code: str
+    ensemble_method: str = "voting"  # "voting"（投票）或 "weighted"（加权）
+    model_weights: Optional[List[ModelWeightConfig]] = None  # 各模型权重（加权模式）
+
+
+class ModelPredictionDetail(BaseModel):
+    """单个模型的预测详情"""
+    model_id: int
+    model_name: str
+    model_type: str
+    accuracy: Optional[float]
+    signal: str
+    signal_strength: float
+    confidence: float
+    weight: Optional[float] = 1.0
+
+
+class EnsemblePredictionResponse(BaseModel):
+    """多模型综合预测响应"""
+    stock_code: str
+    final_signal: str  # 最终综合信号
+    final_signal_strength: float  # 最终信号强度
+    confidence: float  # 综合置信度
+    current_price: float
+    predicted_change_percent: Optional[float] = None
+    prediction_date: datetime
+    ensemble_method: str
+    model_predictions: List[ModelPredictionDetail]  # 各模型预测详情
+    consensus_explanation: str  # 综合解释
+    signal_breakdown: Dict[str, int]  # 各信号投票统计
+

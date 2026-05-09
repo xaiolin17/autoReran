@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
-from app.schemas.ml import MLModel, TrainingRequest, SignalPrediction
+from app.schemas.ml import (
+    MLModel,
+    TrainingRequest,
+    SignalPrediction,
+    EnsemblePredictionRequest,
+    EnsemblePredictionResponse
+)
 from app.services.ml_service import MLService
 
 router = APIRouter()
@@ -44,6 +50,20 @@ def predict_signal(
     service = MLService(db)
     try:
         return service.predict_signal(model_id, stock_code)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/ensemble-predict", response_model=EnsemblePredictionResponse)
+def ensemble_predict(request: EnsemblePredictionRequest, db: Session = Depends(get_db)):
+    """
+    多模型综合预测接口
+    
+    支持投票制和加权制两种方式，返回各模型单独信号 + 综合总信号
+    """
+    service = MLService(db)
+    try:
+        return service.ensemble_predict(request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
