@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.core.logger import logger
+from app.core.monitoring import metrics_middleware, get_metrics
 from app.api.v1 import api_router
 
 
@@ -17,6 +18,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     debug=settings.DEBUG
 )
+
+# 添加 Prometheus 监控中间件
+app.middleware("http")(metrics_middleware)
 
 
 @app.exception_handler(Exception)
@@ -81,6 +85,11 @@ async def backtest(request: Request):
 @app.get("/health")
 async def health_check():
     return {"success": True, "message": "股票数据分析平台运行正常"}
+
+
+@app.get("/metrics")
+async def metrics():
+    return get_metrics()
 
 
 @app.on_event("startup")

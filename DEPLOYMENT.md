@@ -8,6 +8,7 @@
 - [快速开始（Docker Compose）](#快速开始docker-compose)
 - [手动部署](#手动部署)
 - [生产环境部署](#生产环境部署)
+- [监控配置](#监控配置)
 - [维护与监控](#维护与监控)
 
 ---
@@ -65,6 +66,8 @@
    - 应用地址: http://localhost:8000
    - API 文档: http://localhost:8000/docs
    - 健康检查: http://localhost:8000/health
+   - Prometheus: http://localhost:9090
+   - Grafana: http://localhost:3000 (默认账号: admin / admin123)
 
 6. **查看服务状态**
    ```bash
@@ -193,6 +196,25 @@ celery -A app.core.celery_app.celery_app worker --loglevel=info
 celery -A app.core.celery_app.celery_app beat --loglevel=info
 ```
 
+### 4. 前端部署（可选）
+
+#### 4.1 安装前端依赖
+```bash
+cd frontend
+npm install
+```
+
+#### 4.2 开发模式运行
+```bash
+npm run dev
+```
+
+#### 4.3 生产构建
+```bash
+npm run build
+# 使用 nginx 或其他服务器托管 dist 目录
+```
+
 ---
 
 ## 生产环境部署
@@ -317,16 +339,64 @@ sudo crontab -e
 
 ---
 
+## 监控配置
+
+### 1. Prometheus 配置
+
+#### 1.1 配置文件
+项目根目录已包含 `prometheus.yml` 配置文件，默认配置会采集应用的指标数据。
+
+#### 1.2 可用指标
+- `http_requests_total` - HTTP 请求总数
+- `http_request_duration_seconds` - HTTP 请求耗时
+- `http_active_requests` - 活跃请求数
+- `stock_data_fetches_total` - 股票数据获取次数
+- `model_trains_total` - 模型训练次数
+- `backtest_runs_total` - 回测执行次数
+- `celery_tasks_total` - Celery 任务统计
+
+### 2. Grafana 配置
+
+#### 2.1 访问 Grafana
+- URL: http://localhost:3000
+- 默认账号: admin
+- 默认密码: admin123
+
+#### 2.2 数据源配置
+Docker Compose 部署会自动配置 Prometheus 数据源。手动配置时：
+- 名称: Prometheus
+- 类型: Prometheus
+- URL: http://prometheus:9090
+- 访问方式: Server
+
+#### 2.3 创建仪表板
+可以导入以下常用仪表板模板：
+- Node Exporter Full (ID: 1860) - 系统监控
+- Nginx (ID: 12708) - Nginx 监控
+- 自定义股票分析平台仪表板
+
+### 3. 监控告警配置（可选）
+
+可以在 Grafana 中配置告警规则，例如：
+- 错误率超过 5%
+- 响应时间超过 2 秒
+- 系统 CPU 使用率超过 80%
+- 内存使用率超过 90%
+
+---
+
 ## 维护与监控
 
 ### 日志管理
 - 应用日志: 配置在 `.env` 文件的 `LOG_FILE`
 - Nginx 日志: `/var/log/nginx/`
 - Systemd 服务日志: `journalctl -u stock-web -f`
+- Prometheus 日志: 通过 Docker 日志查看
 
 ### 性能监控
 - 使用 `htop` 监控系统资源
 - 使用 `docker stats` 监控容器（如果使用 Docker）
+- 使用 Prometheus + Grafana 监控应用指标
 - 数据库性能: 使用 `pg_stat_statements` 扩展
 
 ### 常见问题排查
@@ -346,10 +416,15 @@ sudo crontab -e
    - 优化数据库查询
    - 检查是否有内存泄漏
 
+4. **监控数据不显示**
+   - 确认 Prometheus 正在采集数据
+   - 检查 Grafana 数据源配置
+   - 验证指标名称和标签
+
 ---
 
 ## 下一步
 
 - 查看 [API 文档](http://localhost:8000/docs) 了解可用接口
 - 阅读 [README.md](./README.md) 了解项目功能
-- 查看 [FRONTEND_ARCH.md](./FRONTEND_ARCH.md) 了解前端架构规划
+- 查看 [COMPARISON.md](./COMPARISON.md) 了解项目改进历史
