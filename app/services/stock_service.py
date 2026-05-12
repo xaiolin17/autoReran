@@ -62,54 +62,66 @@ class StockService:
         # 按优先级依次尝试数据源：Akshare > 东方财富 > 新浪
         data_list = []
         
-        # 优先使用Akshare
-        akshare_data = self.akshare_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-        if not akshare_data.empty:
-            data_list.append(akshare_data)
-        else:
-            # 尝试东方财富
-            eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-            if not eastmoney_data.empty:
-                data_list.append(eastmoney_data)
+        try:
+            # 优先使用Akshare
+            akshare_data = self.akshare_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+            if not akshare_data.empty:
+                data_list.append(akshare_data)
+                logger.info(f"使用Akshare数据源获取 {stock_code}")
             else:
-                # 最后尝试新浪
-                sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-                if not sina_data.empty:
-                    data_list.append(sina_data)
+                # 尝试东方财富
+                eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+                if not eastmoney_data.empty:
+                    data_list.append(eastmoney_data)
+                    logger.info(f"使用东方财富数据源获取 {stock_code}")
+                else:
+                    # 最后尝试新浪
+                    sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+                    if not sina_data.empty:
+                        data_list.append(sina_data)
+                        logger.info(f"使用新浪数据源获取 {stock_code}")
+        except Exception as e:
+            logger.error(f"获取外部数据时出错: {e}")
         
+        # 如果没有外部数据，返回空列表（不生成模拟数据）
         if not data_list:
-            logger.error(f"所有数据源都无法获取 {stock_code} {period} 的数据")
+            logger.warning(f"所有数据源都无法获取 {stock_code} {period} 的数据")
             return []
         
-        cleaned_data = self.data_processor.clean_data(data_list[0])
-        
-        saved_stocks = []
-        for _, row in cleaned_data.iterrows():
-            existing = self.db.query(StockData).filter(
-                StockData.stock_code == row['stock_code'],
-                StockData.period == row['period'],
-                StockData.datetime == row['datetime']
-            ).first()
+        try:
+            cleaned_data = self.data_processor.clean_data(data_list[0])
             
-            if not existing:
-                stock_data = StockData(
-                    stock_code=row['stock_code'],
-                    stock_name=row.get('stock_name'),
-                    period=row['period'],
-                    datetime=row['datetime'],
-                    open_price=row['open_price'],
-                    high_price=row['high_price'],
-                    low_price=row['low_price'],
-                    close_price=row['close_price'],
-                    volume=row['volume'],
-                    amount=row.get('amount'),
-                    source=row.get('source')
-                )
-                self.db.add(stock_data)
-                saved_stocks.append(stock_data)
-        
-        self.db.commit()
-        return saved_stocks
+            saved_stocks = []
+            for _, row in cleaned_data.iterrows():
+                existing = self.db.query(StockData).filter(
+                    StockData.stock_code == row['stock_code'],
+                    StockData.period == row['period'],
+                    StockData.datetime == row['datetime']
+                ).first()
+                
+                if not existing:
+                    stock_data = StockData(
+                        stock_code=row['stock_code'],
+                        stock_name=row.get('stock_name'),
+                        period=row['period'],
+                        datetime=row['datetime'],
+                        open_price=row['open_price'],
+                        high_price=row['high_price'],
+                        low_price=row['low_price'],
+                        close_price=row['close_price'],
+                        volume=row['volume'],
+                        amount=row.get('amount'),
+                        source=row.get('source')
+                    )
+                    self.db.add(stock_data)
+                    saved_stocks.append(stock_data)
+            
+            self.db.commit()
+            return saved_stocks
+        except Exception as e:
+            logger.error(f"保存数据时出错: {e}")
+            self.db.rollback()
+            return []
     
     def get_latest_stock_data(self, stock_code: str, period: str = "1d") -> Optional[StockData]:
         return self.db.query(StockData).filter(

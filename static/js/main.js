@@ -91,10 +91,23 @@ function safeFetch(url, options = {}) {
         signal: controller.signal
     }).then(response => {
         clearTimeout(timeoutId);
-        return response.json();
-    }).then(data => {
-        setCachedData(cacheKey, data);
-        return data;
+        if (!response.ok) {
+            console.warn(`请求 ${url} 返回 ${response.status}，继续尝试获取已有数据`);
+            return null;
+        }
+        return response.text().then(text => {
+            try {
+                const data = JSON.parse(text);
+                setCachedData(cacheKey, data);
+                return data;
+            } catch (e) {
+                console.warn(`响应不是有效的JSON: ${text}`);
+                return null;
+            }
+        });
+    }).catch(error => {
+        console.warn(`请求失败: ${error}`);
+        return null;
     });
 }
 
@@ -311,13 +324,16 @@ async function loadData() {
             loadSignals(stockCode);
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
         } else {
-            showMessage('暂无数据，请尝试其他股票代码或稍后重试', 'warning');
+            showMessage('暂无数据，请确保已安装相关数据源库（akshare）或尝试其他股票', 'warning');
             const signalsContainer = document.getElementById('signalsContainer');
             if (signalsContainer) {
                 signalsContainer.innerHTML = `
                     <div class="empty-state">
                         <span class="empty-state-icon">📊</span>
-                        <p>该股票暂无数据，请尝试其他代码</p>
+                        <p>该股票暂无数据，请确保后端已安装akshare库，或尝试其他代码</p>
+                        <p style="font-size: 13px; color: #94a3b8; margin-top: 10px;">
+                            提示：在后端运行 <code>pip install akshare</code> 可安装数据源
+                        </p>
                     </div>
                 `;
             }
