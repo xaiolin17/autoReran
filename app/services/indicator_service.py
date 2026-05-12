@@ -46,11 +46,11 @@ class IndicatorService:
                 stock.j = float(row['kdj_j']) if pd.notna(row['kdj_j']) else None
             
             if 'macd' in row:
-                stock.macd = float(row['macd']) if pd.notna(row['macd']) else None
+                stock.dif = float(row['macd']) if pd.notna(row['macd']) else None
             if 'macd_signal' in row:
                 stock.dea = float(row['macd_signal']) if pd.notna(row['macd_signal']) else None
             if 'macd_histogram' in row:
-                stock.dif = float(row['macd_histogram']) if pd.notna(row['macd_histogram']) else None
+                stock.macd = float(row['macd_histogram']) if pd.notna(row['macd_histogram']) else None
             
             if 'rsi' in row:
                 stock.rsi6 = float(row['rsi']) if pd.notna(row['rsi']) else None
@@ -82,9 +82,9 @@ class IndicatorService:
                 'kdj_k': float(stock.k) if stock.k else None,
                 'kdj_d': float(stock.d) if stock.d else None,
                 'kdj_j': float(stock.j) if stock.j else None,
-                'macd': float(stock.macd) if stock.macd else None,
-                'macd_signal': float(stock.dea) if stock.dea else None,
-                'macd_histogram': float(stock.dif) if stock.dif else None,
+                'macd': float(stock.dif) if stock.dif else None,
+            'macd_signal': float(stock.dea) if stock.dea else None,
+            'macd_histogram': float(stock.macd) if stock.macd else None,
                 'rsi': float(stock.rsi6) if stock.rsi6 else None,
                 'bb_upper': float(stock.upper) if stock.upper else None,
                 'bb_middle': float(stock.middle) if stock.middle else None,
@@ -119,9 +119,9 @@ class IndicatorService:
             item['kdj_d'] = float(stock.d) if stock.d else (float(row['kdj_d']) if 'kdj_d' in row and pd.notna(row['kdj_d']) else None)
             item['kdj_j'] = float(stock.j) if stock.j else (float(row['kdj_j']) if 'kdj_j' in row and pd.notna(row['kdj_j']) else None)
             
-            item['macd'] = float(stock.macd) if stock.macd else (float(row['macd']) if 'macd' in row and pd.notna(row['macd']) else None)
+            item['macd'] = float(stock.dif) if stock.dif else (float(row['macd']) if 'macd' in row and pd.notna(row['macd']) else None)
             item['macd_signal'] = float(stock.dea) if stock.dea else (float(row['macd_signal']) if 'macd_signal' in row and pd.notna(row['macd_signal']) else None)
-            item['macd_histogram'] = float(stock.dif) if stock.dif else (float(row['macd_histogram']) if 'macd_histogram' in row and pd.notna(row['macd_histogram']) else None)
+            item['macd_histogram'] = float(stock.macd) if stock.macd else (float(row['macd_histogram']) if 'macd_histogram' in row and pd.notna(row['macd_histogram']) else None)
             
             item['rsi'] = float(stock.rsi6) if stock.rsi6 else (float(row['rsi']) if 'rsi' in row and pd.notna(row['rsi']) else None)
             
