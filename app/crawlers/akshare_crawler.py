@@ -80,10 +80,11 @@ class AkshareCrawler(BaseCrawler):
                           start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
         """获取指数数据"""
         try:
-            # If we have end_date but no start_date (loading historical data), set start_date to 10 years earlier
+            # If we have end_date but no start_date (loading historical data), set start_date to 4 months earlier
             if start_date is None and end_date is not None:
                 end_dt = datetime.strptime(end_date, "%Y%m%d")
-                start_date = (end_dt - timedelta(days=3650)).strftime("%Y%m%d")  # 10 years back
+                # Calculate 4 months back (approximating 30 days per month)
+                start_date = (end_dt - timedelta(days=120)).strftime("%Y%m%d")  # ~4 months back
             elif start_date is None:
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
             
@@ -166,10 +167,11 @@ class AkshareCrawler(BaseCrawler):
                           start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
         """获取股票数据"""
         try:
-            # If we have end_date but no start_date (loading historical data), set start_date to 10 years earlier
+            # If we have end_date but no start_date (loading historical data), set start_date to 4 months earlier
             if start_date is None and end_date is not None:
                 end_dt = datetime.strptime(end_date, "%Y%m%d")
-                start_date = (end_dt - timedelta(days=3650)).strftime("%Y%m%d")  # 10 years back
+                # Calculate 4 months back (approximating 30 days per month)
+                start_date = (end_dt - timedelta(days=120)).strftime("%Y%m%d")  # ~4 months back
             elif start_date is None:
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
             
