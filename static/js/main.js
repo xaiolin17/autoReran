@@ -1,5 +1,7 @@
-let optionRatioChart = null;
-let currentOptionData = null;
+let currentData = null;
+let klineChart = null;
+let kdjChart = null;
+let macdChart = null;
 let wsConnection = null;
 let dataCache = new Map();
 let CACHE_TTL = 30000;
@@ -7,6 +9,7 @@ let CACHE_TTL = 30000;
 document.addEventListener('DOMContentLoaded', () => {
     initCharts();
     initWebSocket();
+    initTabs();
     loadData();
     setupEventListeners();
 });
@@ -16,6 +19,28 @@ function setupEventListeners() {
     if (fetchBtn) {
         fetchBtn.addEventListener('click', debounce(loadData, 300));
     }
+}
+
+function initTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            const tabName = tab.dataset.tab;
+            document.querySelectorAll('.indicator-chart').forEach(chart => {
+                chart.classList.add('hidden');
+            });
+            document.getElementById(`${tabName}Chart`).classList.remove('hidden');
+            
+            if (tabName === 'kdj' && kdjChart) {
+                kdjChart.resize();
+            } else if (tabName === 'macd' && macdChart) {
+                macdChart.resize();
+            }
+        });
+    });
 }
 
 function debounce(func, wait) {
@@ -152,151 +177,43 @@ function showMessage(message, type = 'info') {
     }, 3500);
 }
 
-let priceChart, volumeChart, kdjChart, macdChart;
+function calculateMA(dayCount, data) {
+    const result = [];
+    for (let i = 0, len = data.length; i < len; i++) {
+        if (i < dayCount - 1) {
+            result.push('-');
+            continue;
+        }
+        let sum = 0;
+        for (let j = 0; j < dayCount; j++) {
+            sum += parseFloat(data[i - j].close_price);
+        }
+        result.push((sum / dayCount).toFixed(2));
+    }
+    return result;
+}
 
 function initCharts() {
-    const priceCtx = document.getElementById('priceChart');
-    if (priceCtx) {
-        priceChart = new Chart(priceCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: '收盘价',
-                    data: [],
-                    borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    }
-                }
-            }
-        });
+    const klineDom = document.getElementById('klineChart');
+    if (klineDom) {
+        klineChart = echarts.init(klineDom);
     }
-
-    const volumeCtx = document.getElementById('volumeChart');
-    if (volumeCtx) {
-        volumeChart = new Chart(volumeCtx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: '成交量',
-                    data: [],
-                    backgroundColor: 'rgba(139, 92, 246, 0.6)',
-                    borderColor: '#8b5cf6',
-                    borderWidth: 1,
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    }
-                }
-            }
-        });
+    
+    const kdjDom = document.getElementById('kdjChart');
+    if (kdjDom) {
+        kdjChart = echarts.init(kdjDom);
     }
-
-    const kdjCtx = document.getElementById('kdjChart');
-    if (kdjCtx) {
-        kdjChart = new Chart(kdjCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'K', data: [], borderColor: '#06b6d4', tension: 0.4, borderWidth: 2, fill: false },
-                    { label: 'D', data: [], borderColor: '#8b5cf6', tension: 0.4, borderWidth: 2, fill: false },
-                    { label: 'J', data: [], borderColor: '#22c55e', tension: 0.4, borderWidth: 2, fill: false }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        labels: { color: '#94a3b8' }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    }
-                }
-            }
-        });
+    
+    const macdDom = document.getElementById('macdChart');
+    if (macdDom) {
+        macdChart = echarts.init(macdDom);
     }
-
-    const macdCtx = document.getElementById('macdChart');
-    if (macdCtx) {
-        macdChart = new Chart(macdCtx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [
-                    { type: 'bar', label: 'MACD柱', data: [], backgroundColor: [], borderRadius: 4 },
-                    { type: 'line', label: 'DIF', data: [], borderColor: '#06b6d4', tension: 0.4, borderWidth: 2, fill: false },
-                    { type: 'line', label: 'DEA', data: [], borderColor: '#8b5cf6', tension: 0.4, borderWidth: 2, fill: false }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        labels: { color: '#94a3b8' }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: { color: '#94a3b8' }
-                    }
-                }
-            }
-        });
-    }
+    
+    window.addEventListener('resize', () => {
+        klineChart && klineChart.resize();
+        kdjChart && kdjChart.resize();
+        macdChart && macdChart.resize();
+    });
 }
 
 async function loadData() {
@@ -320,6 +237,7 @@ async function loadData() {
         }
         
         if (data && data.length > 0) {
+            currentData = data;
             updateCharts(data);
             loadSignals(stockCode);
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
@@ -345,54 +263,222 @@ async function loadData() {
 }
 
 function updateCharts(data) {
-    if (!data || data.length === 0) return;
+    if (!data || data.length === 0 || !klineChart) return;
 
-    const labels = data.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
-    const closes = data.map(d => d.close_price);
-    const volumes = data.map(d => d.volume);
-    const kValues = data.map(d => d.kdj_k);
-    const dValues = data.map(d => d.kdj_d);
-    const jValues = data.map(d => d.kdj_j);
-    const difValues = data.map(d => d.macd_dif);
-    const deaValues = data.map(d => d.macd_dea);
-    const macdHistogram = data.map(d => d.macd_histogram);
+    const sortedData = [...data].reverse();
+    const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
+    const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
+    const volumes = sortedData.map(d => [d.volume]);
+    const closes = sortedData.map(d => d.close_price);
+    
+    const ma5 = calculateMA(5, sortedData);
+    const ma10 = calculateMA(10, sortedData);
+    const ma20 = calculateMA(20, sortedData);
 
-    if (priceChart) {
-        priceChart.data.labels = labels;
-        priceChart.data.datasets[0].data = closes;
-        priceChart.update('none');
-    }
+    const kdjK = sortedData.map(d => d.kdj_k);
+    const kdjD = sortedData.map(d => d.kdj_d);
+    const kdjJ = sortedData.map(d => d.kdj_j);
+    
+    const macdDiff = sortedData.map(d => d.macd_dif);
+    const macdDea = sortedData.map(d => d.macd_dea);
+    const macdHistogram = sortedData.map(d => d.macd_histogram);
+    
+    const macdColors = macdHistogram.map(v => v >= 0 ? '#ef4444' : '#22c55e');
 
-    if (volumeChart) {
-        volumeChart.data.labels = labels;
-        volumeChart.data.datasets[0].data = volumes;
-        volumeChart.update('none');
-    }
+    const klineOption = {
+        backgroundColor: 'transparent',
+        animation: false,
+        legend: {
+            top: 10,
+            left: 'center',
+            data: ['K线', 'MA5', 'MA10', 'MA20'],
+            textStyle: { color: '#94a3b8' }
+        },
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross' },
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            textStyle: { color: '#f8fafc' }
+        },
+        grid: [
+            { left: '10%', right: '8%', top: '10%', height: '50%' },
+            { left: '10%', right: '8%', top: '70%', height: '16%' }
+        ],
+        xAxis: [
+            {
+                type: 'category',
+                data: dates,
+                scale: true,
+                boundaryGap: false,
+                axisLine: { lineStyle: { color: '#475569' } },
+                axisLabel: { color: '#94a3b8' },
+                min: 'dataMin',
+                max: 'dataMax'
+            },
+            {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                scale: true,
+                boundaryGap: false,
+                axisLine: { lineStyle: { color: '#475569' } },
+                axisLabel: { color: '#94a3b8', show: false },
+                axisTick: { show: false },
+                splitLine: { show: false },
+                min: 'dataMin',
+                max: 'dataMax'
+            }
+        ],
+        yAxis: [
+            {
+                scale: true,
+                splitArea: { show: true, areaStyle: { color: 'rgba(255, 255, 255, 0.02)' } },
+                axisLine: { lineStyle: { color: '#475569' } },
+                axisLabel: { color: '#94a3b8' },
+                splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+            },
+            {
+                scale: true,
+                gridIndex: 1,
+                splitNumber: 2,
+                axisLine: { lineStyle: { color: '#475569' } },
+                axisLabel: { color: '#94a3b8' },
+                axisTick: { show: false },
+                splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+            }
+        ],
+        dataZoom: [
+            { type: 'inside', xAxisIndex: [0, 1], start: 0, end: 100 },
+            { show: true, xAxisIndex: [0, 1], type: 'slider', bottom: 10, start: 0, end: 100 }
+        ],
+        series: [
+            {
+                name: 'K线',
+                type: 'candlestick',
+                data: klines,
+                itemStyle: {
+                    color: '#22c55e',
+                    color0: '#ef4444',
+                    borderColor: '#22c55e',
+                    borderColor0: '#ef4444'
+                }
+            },
+            { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { width: 1, opacity: 0.7 }, showSymbol: false, color: '#06b6d4' },
+            { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { width: 1, opacity: 0.7 }, showSymbol: false, color: '#f59e0b' },
+            { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { width: 1, opacity: 0.7 }, showSymbol: false, color: '#8b5cf6' },
+            {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: volumes,
+                itemStyle: {
+                    color: function(params) {
+                        const dataIndex = params.dataIndex;
+                        return klines[dataIndex][1] >= klines[dataIndex][0] ? 'rgba(34, 197, 94, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+                    }
+                }
+            }
+        ]
+    };
+    
+    klineChart.setOption(klineOption);
 
-    if (kdjChart) {
-        kdjChart.data.labels = labels;
-        kdjChart.data.datasets[0].data = kValues;
-        kdjChart.data.datasets[1].data = dValues;
-        kdjChart.data.datasets[2].data = jValues;
-        kdjChart.update('none');
-    }
+    const kdjOption = {
+        backgroundColor: 'transparent',
+        animation: false,
+        legend: {
+            top: 10,
+            left: 'center',
+            data: ['K', 'D', 'J'],
+            textStyle: { color: '#94a3b8' }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            textStyle: { color: '#f8fafc' }
+        },
+        grid: { left: '10%', right: '8%', top: '15%', bottom: '10%' },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            axisLine: { lineStyle: { color: '#475569' } },
+            axisLabel: { color: '#94a3b8' }
+        },
+        yAxis: {
+            scale: true,
+            splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
+            axisLine: { lineStyle: { color: '#475569' } },
+            axisLabel: { color: '#94a3b8' }
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 }
+        ],
+        series: [
+            { name: 'K', type: 'line', data: kdjK, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
+            { name: 'D', type: 'line', data: kdjD, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' },
+            { name: 'J', type: 'line', data: kdjJ, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#22c55e' }
+        ]
+    };
+    
+    kdjChart.setOption(kdjOption);
 
-    if (macdChart) {
-        macdChart.data.labels = labels;
-        macdChart.data.datasets[0].data = macdHistogram;
-        macdChart.data.datasets[0].backgroundColor = macdHistogram.map(v => 
-            v >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
-        );
-        macdChart.data.datasets[1].data = difValues;
-        macdChart.data.datasets[2].data = deaValues;
-        macdChart.update('none');
-    }
+    const macdOption = {
+        backgroundColor: 'transparent',
+        animation: false,
+        legend: {
+            top: 10,
+            left: 'center',
+            data: ['MACD', 'DIF', 'DEA'],
+            textStyle: { color: '#94a3b8' }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            textStyle: { color: '#f8fafc' }
+        },
+        grid: { left: '10%', right: '8%', top: '15%', bottom: '10%' },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            axisLine: { lineStyle: { color: '#475569' } },
+            axisLabel: { color: '#94a3b8' }
+        },
+        yAxis: {
+            scale: true,
+            splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
+            axisLine: { lineStyle: { color: '#475569' } },
+            axisLabel: { color: '#94a3b8' }
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 }
+        ],
+        series: [
+            {
+                name: 'MACD',
+                type: 'bar',
+                data: macdHistogram,
+                itemStyle: {
+                    color: function(params) {
+                        return params.value >= 0 ? '#ef4444' : '#22c55e';
+                    }
+                }
+            },
+            { name: 'DIF', type: 'line', data: macdDiff, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
+            { name: 'DEA', type: 'line', data: macdDea, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' }
+        ]
+    };
+    
+    macdChart.setOption(macdOption);
 }
 
 async function loadSignals(stockCode) {
     try {
         const result = await safeFetch(`/api/v1/indicators/signals/${stockCode}`);
-        displaySignals(result.signals);
+        displaySignals(result && result.signals ? result.signals : null);
     } catch (error) {
         console.error('加载信号失败:', error);
         const signalsContainer = document.getElementById('signalsContainer');

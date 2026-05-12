@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>股票数据分析平台</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -28,31 +28,23 @@
             </div>
         </div>
 
-        <div class="charts-section">
+        <div class="charts-container">
             <div class="section-header">
                 <h2>市场走势</h2>
             </div>
-            <div class="charts-grid">
-                <div class="chart-box">
-                    <h3>价格走势</h3>
-                    <canvas id="priceChart"></canvas>
-                </div>
-                <div class="chart-box">
-                    <h3>成交量</h3>
-                    <canvas id="volumeChart"></canvas>
-                </div>
-            </div>
+            <div id="klineChart" class="kline-chart"></div>
         </div>
 
-        <div class="indicators-grid">
-            <div class="indicator-box">
-                <h3>KDJ指标</h3>
-                <canvas id="kdjChart"></canvas>
+        <div class="indicators-container">
+            <div class="section-header">
+                <h2>技术指标</h2>
             </div>
-            <div class="indicator-box">
-                <h3>MACD指标</h3>
-                <canvas id="macdChart"></canvas>
+            <div class="tabs">
+                <button class="tab active" data-tab="kdj">KDJ</button>
+                <button class="tab" data-tab="macd">MACD</button>
             </div>
+            <div id="kdjChart" class="indicator-chart"></div>
+            <div id="macdChart" class="indicator-chart hidden"></div>
         </div>
 
         <div class="signals-section">

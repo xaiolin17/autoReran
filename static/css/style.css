@@ -183,8 +183,8 @@ input::placeholder {
     width: 100%;
 }
 
-.charts-section {
-    margin-bottom: 56px;
+.charts-container {
+    margin-bottom: 32px;
 }
 
 .section-header {
@@ -200,45 +200,56 @@ input::placeholder {
     letter-spacing: -0.3px;
 }
 
-.charts-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-}
-
-.chart-box {
+.kline-chart {
     background: var(--bg-secondary);
     border: 1px solid var(--glass-border);
     border-radius: 20px;
-    padding: 28px;
+    padding: 24px;
+    height: 600px;
 }
 
-.chart-box h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 20px;
-}
-
-.indicators-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
+.indicators-container {
     margin-bottom: 56px;
 }
 
-.indicator-box {
+.tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.tab {
+    padding: 10px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tab.active {
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(139, 92, 246, 0.15));
+    border-color: var(--accent-cyan);
+    color: var(--text-primary);
+}
+
+.indicator-chart {
     background: var(--bg-secondary);
     border: 1px solid var(--glass-border);
     border-radius: 20px;
-    padding: 28px;
+    padding: 24px;
+    height: 300px;
 }
 
-.indicator-box h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 20px;
+.indicator-chart.hidden {
+    display: none;
 }
 
 .signals-section {
