@@ -6,8 +6,8 @@ from typing import Optional, List, Dict, Any
 class BacktestResultBase(BaseModel):
     stock_code: str
     strategy_name: str
-    start_date: datetime
-    end_date: datetime
+    start_date: str
+    end_date: str
     initial_capital: float
     final_capital: float
     total_return: float
@@ -15,8 +15,8 @@ class BacktestResultBase(BaseModel):
     max_drawdown: float
     win_rate: float
     total_trades: int
-    winning_trades: int
-    losing_trades: int
+    winning_trades: Optional[int] = None
+    losing_trades: Optional[int] = None
     trade_log: Optional[List[Dict[str, Any]]] = None
     notes: Optional[str] = None
 
@@ -27,8 +27,9 @@ class BacktestResultCreate(BacktestResultBase):
 
 class BacktestResult(BacktestResultBase):
     id: int
+    model_id: Optional[int] = None
     created_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -36,6 +37,7 @@ class BacktestResult(BacktestResultBase):
 class BacktestRequest(BaseModel):
     stock_code: str
     strategy_name: str
+    model_id: Optional[int] = None
     start_date: str
     end_date: str
     initial_capital: float = 100000.0
@@ -48,3 +50,4 @@ class TradeLog(BaseModel):
     price: float
     shares: int
     reason: Optional[str] = None
+    profit: Optional[float] = None

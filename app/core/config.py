@@ -1,72 +1,49 @@
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
-from typing import Optional, List
-from functools import lru_cache
+from typing import Optional
+
+
+# 获取项目根目录
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "股票数据分析平台"
+    PROJECT_NAME: str = "AReran"
     DEBUG: bool = True
     
-    DATABASE_URL: str = "sqlite:///./stock_data.db"
-    
-    SINA_STOCK_URL: str = "https://hq.sinajs.cn/list="
-    EASTMONEY_URL: str = "https://push2.eastmoney.com/api/qt/stock/kline/get"
-    EASTMONEY_OPTION_CHAIN_URL: str = "https://push2.eastmoney.com/api/qt/official/stock/ls"
-    EASTMONEY_OPTION_QUOTE_URL: str = "https://push2.eastmoney.com/api/qt/stock/details/get"
+    # 使用绝对路径的 SQLite 数据库
+    DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'stock_data.db'}"
     
     SCHEDULER_ENABLED: bool = True
-    CRAWL_INTERVAL_MINUTES: int = 5
+    CRAWL_INTERVAL_MINUTES: int = 60
     
-    MODELS_DIR: str = "models"
+    # 使用绝对路径
+    MODELS_DIR: str = str(BASE_DIR / "models")
     
     LOG_LEVEL: str = "INFO"
     LOG_FILE: Optional[str] = None
     
-    CACHE_ENABLED: bool = True
-    CACHE_MAXSIZE: int = 1024
-    CACHE_DEFAULT_TTL: int = 300
-    CACHE_STOCK_DATA_TTL: int = 300
-    CACHE_INDICATOR_TTL: int = 600
+    CORS_ORIGINS: list[str] = ["http://localhost", "http://localhost:8000"]
     
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
-    
-    RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_PER_HOUR: int = 1000
     
-    BACKUP_DIR: str = "backups"
+    # 使用绝对路径
+    BACKUP_DIR: str = str(BASE_DIR / "backups")
     BACKUP_RETENTION_DAYS: int = 30
     
-    CORS_ORIGINS: List[str] = ["*"]
-    CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: List[str] = ["*"]
-    CORS_ALLOW_HEADERS: List[str] = ["*"]
-    
-    CSRF_ENABLED: bool = False
-    CSRF_SECRET_KEY: Optional[str] = None
-    
-    CSP_ENABLED: bool = True
-    CSP_DIRECTIVES: dict = {
-        "default-src": "'self'",
-        "script-src": "'self' 'unsafe-inline'",
-        "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: https:",
-    }
-    
+    # 爬虫配置（提供默认值）
+    SINA_STOCK_URL: str = "http://hq.sinajs.cn/list="
+    EASTMONEY_URL: str = "http://push2.eastmoney.com/api/qt/stock/kline/get"
+
     class Config:
         env_file = ".env"
-        case_sensitive = True
 
 
-@lru_cache()
-def get_settings():
-    return Settings()
+settings = Settings()
 
-
-settings = get_settings()
+# 确保必要的目录存在
+os.makedirs(settings.MODELS_DIR, exist_ok=True)
+os.makedirs(settings.BACKUP_DIR, exist_ok=True)

@@ -23,11 +23,22 @@ class MLModel(MLModelBase):
     precision: Optional[float] = None
     recall: Optional[float] = None
     f1_score: Optional[float] = None
+    train_size: Optional[float] = 0.8
+    used_marked_data: Optional[bool] = False
+    num_marks_used: Optional[int] = 0
     created_at: Optional[datetime] = None
     is_active: int = 0
-    
+
     class Config:
         from_attributes = True
+
+
+class TradeMarkSchema(BaseModel):
+    index: int
+    date: Optional[str] = None
+    price: float
+    type: str  # 'buy' or 'sell'
+    timestamp: Optional[int] = None
 
 
 class TrainingRequest(BaseModel):
@@ -37,7 +48,7 @@ class TrainingRequest(BaseModel):
     feature_columns: Optional[List[str]] = None
     target_column: str = "close_price"
     train_size: float = 0.8
-    is_classification: bool = False  # 新增：是否是分类模型
+    trade_marks: Optional[List[TradeMarkSchema]] = None
 
 
 class PredictionRequest(BaseModel):
@@ -49,60 +60,4 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     prediction: float
     confidence: Optional[float] = None
-
-
-class SignalPrediction(BaseModel):
-    """多空信号预测响应"""
-    model_id: int
-    stock_code: str
-    signal: str  # "BUY", "SELL", "HOLD"
-    signal_strength: float  # 信号强度 0-100
-    confidence: float  # 置信度 0-1
-    current_price: float
-    predicted_price: Optional[float] = None
-    predicted_change_percent: Optional[float] = None
-    prediction_date: datetime
-    signal_explanation: str  # 信号解释
-    technical_indicators: Optional[Dict[str, float]] = None  # 使用的技术指标值
-
-
-class ModelWeightConfig(BaseModel):
-    """单个模型的权重配置"""
-    model_id: int
-    weight: float = 1.0  # 权重，默认1.0
-
-
-class EnsemblePredictionRequest(BaseModel):
-    """多模型综合预测请求"""
-    model_ids: List[int]  # 要使用的模型ID列表
-    stock_code: str
-    ensemble_method: str = "voting"  # "voting"（投票）或 "weighted"（加权）
-    model_weights: Optional[List[ModelWeightConfig]] = None  # 各模型权重（加权模式）
-
-
-class ModelPredictionDetail(BaseModel):
-    """单个模型的预测详情"""
-    model_id: int
-    model_name: str
-    model_type: str
-    accuracy: Optional[float]
-    signal: str
-    signal_strength: float
-    confidence: float
-    weight: Optional[float] = 1.0
-
-
-class EnsemblePredictionResponse(BaseModel):
-    """多模型综合预测响应"""
-    stock_code: str
-    final_signal: str  # 最终综合信号
-    final_signal_strength: float  # 最终信号强度
-    confidence: float  # 综合置信度
-    current_price: float
-    predicted_change_percent: Optional[float] = None
-    prediction_date: datetime
-    ensemble_method: str
-    model_predictions: List[ModelPredictionDetail]  # 各模型预测详情
-    consensus_explanation: str  # 综合解释
-    signal_breakdown: Dict[str, int]  # 各信号投票统计
-
+    current_price: Optional[float] = None

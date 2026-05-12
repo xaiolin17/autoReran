@@ -1,15 +1,16 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import joblib
+import os
 from app.models.backtest_result import BacktestResult
+from app.models.ml_model import MLModel
 from app.schemas.backtest import BacktestResultCreate, BacktestRequest
 from app.services.stock_service import StockService
 from app.services.indicator_service import IndicatorService
 from app.utils.technical_indicators import TechnicalIndicators
-from app.core.logger import logger
 
 
 class BacktestService:
@@ -19,8 +20,6 @@ class BacktestService:
         self.indicator_service = IndicatorService(db)
     
     def run_backtest(self, request: BacktestRequest) -> BacktestResult:
-        logger.info(f"开始回测: 股票={request.stock_code}, 策略={request.strategy_name}")
-        
         stock_data = self.stock_service.get_stock_data(request.stock_code, "1d")
         
         if len(stock_data) < 100:
@@ -37,31 +36,28 @@ class BacktestService:
         if len(df) < 50:
             raise ValueError("指定日期范围内数据不足")
         
-        signals = self._generate_signals(df, request.strategy_name, request.params or {})
+        # 如果指定了模型，使用模型生成信号
+        if request.model_id:
+            signals = self._generate_model_signals(df, request.model_id)
+        else:
+            signals = self._generate_signals(df, request.strategy_name, request.params or {})
         
         backtest_result = self._execute_trades(df, signals, request.initial_capital)
         
-        logger.info(f"回测完成: 收益率={backtest_result['total_return']:.2f}%, 最大回撤={backtest_result['max_drawdown']:.2f}%")
-        
-        db_result = BacktestResultCreate(
-            stock_code=request.stock_code,
-            strategy_name=request.strategy_name,
-            start_date=df.iloc[0]['datetime'],
-            end_date=df.iloc[-1]['datetime'],
-            initial_capital=request.initial_capital,
-            final_capital=backtest_result['final_capital'],
-            total_return=backtest_result['total_return'],
-            annual_return=backtest_result['annual_return'],
-            max_drawdown=backtest_result['max_drawdown'],
-            win_rate=backtest_result['win_rate'],
-            total_trades=backtest_result['total_trades'],
-            winning_trades=backtest_result['winning_trades'],
-            losing_trades=backtest_result['losing_trades'],
-            trade_log=backtest_result['trade_log'],
-            notes=f"Backtest for {request.stock_code} using {request.strategy_name}"
-        )
-        
-        db_backtest = BacktestResult(**db_result.model_dump())
+        db_backtest = BacktestResult()
+        db_backtest.stock_code = request.stock_code
+        db_backtest.strategy_name = request.strategy_name
+        db_backtest.model_id = request.model_id
+        db_backtest.start_date = df.iloc[0]['datetime'].isoformat() if hasattr(df.iloc[0]['datetime'], 'isoformat') else str(df.iloc[0]['datetime'])
+        db_backtest.end_date = df.iloc[-1]['datetime'].isoformat() if hasattr(df.iloc[-1]['datetime'], 'isoformat') else str(df.iloc[-1]['datetime'])
+        db_backtest.initial_capital = request.initial_capital
+        db_backtest.final_capital = backtest_result['final_capital']
+        db_backtest.total_return = backtest_result['total_return']
+        db_backtest.annual_return = backtest_result['annual_return']
+        db_backtest.max_drawdown = backtest_result['max_drawdown']
+        db_backtest.win_rate = backtest_result['win_rate']
+        db_backtest.total_trades = backtest_result['total_trades']
+        db_backtest.trade_log = backtest_result['trade_log']
         db_backtest.created_at = datetime.now()
         
         self.db.add(db_backtest)
@@ -69,6 +65,81 @@ class BacktestService:
         self.db.refresh(db_backtest)
         
         return db_backtest
+    
+    def _generate_model_signals(self, df: pd.DataFrame, model_id: int) -> List[Dict]:
+        """使用训练好的模型生成买卖信号"""
+        db_model = self.db.query(MLModel).filter(MLModel.id == model_id).first()
+        if not db_model:
+            raise ValueError("模型不存在")
+        
+        if not os.path.exists(db_model.file_path):
+            raise ValueError("模型文件不存在")
+        
+        model = joblib.load(db_model.file_path)
+        
+        signals = []
+        feature_columns = db_model.feature_columns or []
+        
+        # 同时适配两种命名方式
+        column_mapping = {
+            'open_price': 'open',
+            'high_price': 'high', 
+            'low_price': 'low',
+            'close_price': 'close',
+            'volume': 'volume'
+        }
+        
+        available_features = []
+        for col in feature_columns:
+            if col in df.columns:
+                available_features.append(col)
+            elif col in column_mapping and column_mapping[col] in df.columns:
+                available_features.append(column_mapping[col])
+        
+        if len(available_features) == 0:
+            available_features = [col for col in ['open', 'high', 'low', 'close', 'volume'] if col in df.columns]
+        
+        # 确定价格列 - 优先使用 close_price，否则用 close
+        price_col = 'close_price' if 'close_price' in df.columns else 'close'
+        
+        # 遍历数据，使用模型进行预测并生成信号
+        for i in range(1, len(df) - 1):
+            if i < 20:  # 留出足够的数据用于计算指标
+                continue
+            
+            current_data = df.iloc[i:i+1][available_features]
+            
+            if len(current_data.dropna()) == 0:
+                continue
+            
+            try:
+                predicted_price = model.predict(current_data)[0]
+                current_price = df.iloc[i][price_col]
+                
+                # 简单的信号生成策略：预测价格上涨超过一定幅度就买入，下跌就卖出
+                price_change = (predicted_price - current_price) / current_price
+                
+                if price_change > 0.02:  # 预测上涨超过 2%，买入
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'],
+                        'type': 'buy',
+                        'indicator': 'MODEL',
+                        'reason': f'Model prediction: {predicted_price:.2f} vs current: {current_price:.2f}',
+                        'price': current_price
+                    })
+                elif price_change < -0.02:  # 预测下跌超过 2%，卖出
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'],
+                        'type': 'sell',
+                        'indicator': 'MODEL',
+                        'reason': f'Model prediction: {predicted_price:.2f} vs current: {current_price:.2f}',
+                        'price': current_price
+                    })
+            except Exception:
+                continue
+        
+        signals.sort(key=lambda x: x['datetime'])
+        return signals
     
     def _generate_signals(self, df: pd.DataFrame, strategy_name: str, params: Dict) -> List[Dict]:
         signals = []
@@ -85,14 +156,20 @@ class BacktestService:
             signals.extend(kdj_signals)
             signals.extend(macd_signals)
         else:
-            df = TechnicalIndicators.calculate_kdj(df)
-            df = TechnicalIndicators.calculate_macd(df)
+            # 确保指标存在
+            if 'kdj_k' not in df.columns or 'kdj_d' not in df.columns:
+                df = TechnicalIndicators.calculate_kdj(df)
+            if 'macd' not in df.columns:
+                df = TechnicalIndicators.calculate_macd(df)
+            
+            # 确定价格列
+            price_col = 'close_price' if 'close_price' in df.columns else 'close'
             
             for i in range(1, len(df)):
-                prev_k = df.iloc[i-1]['kdj_k']
-                prev_d = df.iloc[i-1]['kdj_d']
-                curr_k = df.iloc[i]['kdj_k']
-                curr_d = df.iloc[i]['kdj_d']
+                prev_k = df.iloc[i-1].get('kdj_k', 50)
+                prev_d = df.iloc[i-1].get('kdj_d', 50)
+                curr_k = df.iloc[i].get('kdj_k', 50)
+                curr_d = df.iloc[i].get('kdj_d', 50)
                 
                 if prev_k <= prev_d and curr_k > curr_d:
                     signals.append({
@@ -100,7 +177,7 @@ class BacktestService:
                         'type': 'buy',
                         'indicator': 'DEFAULT',
                         'reason': 'Default buy signal',
-                        'price': df.iloc[i]['close_price']
+                        'price': df.iloc[i][price_col]
                     })
                 elif prev_k >= prev_d and curr_k < curr_d:
                     signals.append({
@@ -108,7 +185,7 @@ class BacktestService:
                         'type': 'sell',
                         'indicator': 'DEFAULT',
                         'reason': 'Default sell signal',
-                        'price': df.iloc[i]['close_price']
+                        'price': df.iloc[i][price_col]
                     })
         
         signals.sort(key=lambda x: x['datetime'])
@@ -121,6 +198,9 @@ class BacktestService:
         trades = []
         equity_curve = [capital]
         dates = [df.iloc[0]['datetime']]
+        
+        # 确定价格列
+        price_col = 'close_price' if 'close_price' in df.columns else 'close'
         
         df_dict = {row['datetime']: row for _, row in df.iterrows()}
         
@@ -157,7 +237,7 @@ class BacktestService:
                 position = 0
         
         if position > 0:
-            last_price = df.iloc[-1]['close_price']
+            last_price = df.iloc[-1][price_col]
             capital += position * last_price
         
         final_capital = capital
@@ -187,7 +267,7 @@ class BacktestService:
         temp_entry = 0
         
         for _, row in df.iterrows():
-            price = row['close_price']
+            price = row[price_col]
             
             for signal in signals:
                 if signal['datetime'] == row['datetime']:
@@ -224,21 +304,18 @@ class BacktestService:
         }
     
     def get_backtests(self, stock_code: Optional[str] = None) -> List[BacktestResult]:
-        query = select(BacktestResult)
+        query = self.db.query(BacktestResult)
         if stock_code:
-            query = query.where(BacktestResult.stock_code == stock_code)
-        query = query.order_by(desc(BacktestResult.created_at))
-        
-        return self.db.execute(query).scalars().all()
+            query = query.filter(BacktestResult.stock_code == stock_code)
+        return query.order_by(BacktestResult.created_at.desc()).all()
     
     def get_backtest(self, backtest_id: int) -> Optional[BacktestResult]:
-        return self.db.get(BacktestResult, backtest_id)
+        return self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
     
     def delete_backtest(self, backtest_id: int) -> bool:
-        db_backtest = self.db.get(BacktestResult, backtest_id)
+        db_backtest = self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
         if db_backtest:
             self.db.delete(db_backtest)
             self.db.commit()
-            logger.info(f"删除回测结果: {backtest_id}")
             return True
         return False

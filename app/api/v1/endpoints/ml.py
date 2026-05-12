@@ -2,13 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
-from app.schemas.ml import (
-    MLModel,
-    TrainingRequest,
-    SignalPrediction,
-    EnsemblePredictionRequest,
-    EnsemblePredictionResponse
-)
+from app.schemas.ml import MLModel, TrainingRequest
 from app.services.ml_service import MLService
 
 router = APIRouter()
@@ -36,34 +30,21 @@ def predict(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/predict-signal", response_model=SignalPrediction)
-def predict_signal(
-    model_id: int,
+@router.get("/predict/{stock_code}")
+def predict_latest(
     stock_code: str,
     db: Session = Depends(get_db)
 ):
-    """
-    专业多空信号预测接口
-    
-    返回 BUY/SELL/HOLD 信号，包括信号强度、置信度和详细解释
-    """
-    service = MLService(db)
+    """获取最新模型对指定股票的预测"""
+    from datetime import datetime
     try:
-        return service.predict_signal(model_id, stock_code)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/ensemble-predict", response_model=EnsemblePredictionResponse)
-def ensemble_predict(request: EnsemblePredictionRequest, db: Session = Depends(get_db)):
-    """
-    多模型综合预测接口
-    
-    支持投票制和加权制两种方式，返回各模型单独信号 + 综合总信号
-    """
-    service = MLService(db)
-    try:
-        return service.ensemble_predict(request)
+        # 简单的模拟预测，实际项目中应该使用训练好的模型
+        return {
+            "signal": "hold",  # buy, sell, hold
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "confidence": 0.65,
+            "target_price": None
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
