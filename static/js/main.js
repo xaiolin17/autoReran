@@ -2,40 +2,22 @@ let optionRatioChart = null;
 let currentOptionData = null;
 let wsConnection = null;
 let dataCache = new Map();
-let CACHE_TTL = 30000; // 30秒
+let CACHE_TTL = 30000;
 
 document.addEventListener('DOMContentLoaded', () => {
     initCharts();
     initWebSocket();
     loadData();
     setupEventListeners();
-    initOptionSection();
 });
 
 function setupEventListeners() {
     const fetchBtn = document.getElementById('fetchBtn');
-    const generateBtn = document.getElementById('generateBtn');
-    const loadOptionsBtn = document.getElementById('loadOptionsBtn');
-    const refreshOptionsBtn = document.getElementById('refreshOptionsBtn');
-    const expireDateSelect = document.getElementById('expireDateSelect');
-    
-    // 添加防抖
-    const debouncedLoadData = debounce(loadData, 300);
-    const debouncedLoadOptions = debounce(loadOptionData, 400);
-    
-    fetchBtn.addEventListener('click', debouncedLoadData);
-    if (generateBtn) {
-        generateBtn.addEventListener('click', debounce(() => {
-            // 现在直接使用真实数据，不再生成样本数据
-            showMessage('现在使用真实数据源，请点击"加载数据"获取！', 'info');
-        }, 300));
+    if (fetchBtn) {
+        fetchBtn.addEventListener('click', debounce(loadData, 300));
     }
-    loadOptionsBtn.addEventListener('click', debouncedLoadOptions);
-    refreshOptionsBtn.addEventListener('click', debouncedLoadOptions);
-    expireDateSelect.addEventListener('change', debounce(filterOptionData, 200));
 }
 
-// ===== 防抖节流函数 =====
 function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -48,18 +30,6 @@ function debounce(func, wait) {
     };
 }
 
-function throttle(func, limit) {
-    let lastCall = 0;
-    return function(...args) {
-        const now = Date.now();
-        if (now - lastCall >= limit) {
-            lastCall = now;
-            return func(...args);
-        }
-    };
-}
-
-// ===== WebSocket 实时连接 =====
 function initWebSocket() {
     const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -69,12 +39,10 @@ function initWebSocket() {
     
     wsConnection.onopen = () => {
         console.log('WebSocket连接已建立');
-        // 发送订阅消息
         wsConnection.send(JSON.stringify({
             type: 'subscribe',
             channel: 'realtime'
         }));
-        showMessage('实时连接已建立', 'info');
     };
     
     wsConnection.onmessage = (event) => {
@@ -99,30 +67,37 @@ function initWebSocket() {
 function handleWebSocketMessage(message) {
     switch (message.type) {
         case 'pong':
-            // 健康检查响应
             break;
         case 'subscribed':
             console.log('已订阅频道:', message.channel);
             break;
         case 'refresh_needed':
-            // 收到数据刷新通知，提示用户刷新
-            if (message.reason !== 'manual_refresh' || message.sender !== getCurrentClientId()) {
-                showMessage('有新数据更新，点击刷新按钮获取最新数据', 'warning');
-            }
             break;
     }
 }
 
-function getCurrentClientId() {
-    if (wsConnection) {
-        const url = wsConnection.url;
-        const parts = url.split('/');
-        return parts[parts.length - 1];
+function safeFetch(url, options = {}) {
+    const cacheKey = `${options.method || 'GET'}_${url}`;
+    const cached = getCachedData(cacheKey);
+    if (cached && !options.skipCache) {
+        return Promise.resolve(cached);
     }
-    return '';
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    return fetch(url, {
+        ...options,
+        signal: controller.signal
+    }).then(response => {
+        clearTimeout(timeoutId);
+        return response.json();
+    }).then(data => {
+        setCachedData(cacheKey, data);
+        return data;
+    });
 }
 
-// ===== 数据缓存管理 =====
 function getCachedData(key) {
     const cached = dataCache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -132,61 +107,8 @@ function getCachedData(key) {
     return null;
 }
 
-function setCacheData(key, data) {
+function setCachedData(key, data) {
     dataCache.set(key, { data, timestamp: Date.now() });
-}
-
-// ===== 网络请求优化 =====
-async function safeFetch(url, options = {}) {
-    // 检查缓存
-    const cacheKey = `${options.method || 'GET'}_${url}`;
-    const cached = getCachedData(cacheKey);
-    if (cached && !options.skipCache) {
-        return cached;
-    }
-    
-    // 带超时的 fetch
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        const data = await response.json();
-        setCacheData(cacheKey, data);
-        return data;
-    } catch (error) {
-        clearTimeout(timeoutId);
-        throw error;
-    }
-}
-
-function initOptionSection() {
-    // Show options section by default
-    document.getElementById('optionsSection').style.display = 'block';
-}
-
-function showLoading(show = true) {
-    const chartsContainer = document.querySelector('.charts-container');
-    const signalsContainer = document.getElementById('signalsContainer');
-    
-    if (show) {
-        chartsContainer.style.opacity = '0.3';
-        chartsContainer.style.pointerEvents = 'none';
-        signalsContainer.innerHTML = `
-            <div style="text-align: center; padding: 60px 20px;">
-                <div style="display: inline-block; width: 50px; height: 50px; border: 4px solid rgba(0,240,255,0.2); border-top: 4px solid #00f0ff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                <p style="margin-top: 20px; color: #94a3b8;">正在加载数据...</p>
-            </div>
-        `;
-    } else {
-        chartsContainer.style.opacity = '1';
-        chartsContainer.style.pointerEvents = 'auto';
-    }
 }
 
 function showMessage(message, type = 'info') {
@@ -196,25 +118,172 @@ function showMessage(message, type = 'info') {
         top: 24px;
         right: 24px;
         padding: 16px 24px;
-        background: ${type === 'success' ? 'linear-gradient(135deg, rgba(16,185,129,0.95), rgba(16,185,129,0.85))' : 
-                   type === 'error' ? 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(239,68,68,0.85))' : 
-                   type === 'warning' ? 'linear-gradient(135deg, rgba(245,158,11,0.95), rgba(245,158,11,0.85))' :
-                   'linear-gradient(135deg, rgba(0,240,255,0.95), rgba(139,92,246,0.85))'};
+        background: ${type === 'success' ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.85))' : 
+                    type === 'error' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(239, 68, 68, 0.85))' : 
+                    type === 'warning' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(245, 158, 11, 0.85))' :
+                    'linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(139, 92, 246, 0.85))'};
         color: white;
         border-radius: 16px;
         box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         z-index: 1000;
-        animation: slideInRight 0.4s cubic-bezier(0.4,0,0.2,1);
         font-weight: 500;
         max-width: 400px;
+        animation: slideIn 0.4s ease;
     `;
     msgDiv.textContent = message;
     document.body.appendChild(msgDiv);
     
     setTimeout(() => {
-        msgDiv.style.animation = 'slideOutRight 0.4s cubic-bezier(0.4,0,0.2,1)';
+        msgDiv.style.animation = 'slideOut 0.4s ease';
         setTimeout(() => msgDiv.remove(), 400);
     }, 3500);
+}
+
+let priceChart, volumeChart, kdjChart, macdChart;
+
+function initCharts() {
+    const priceCtx = document.getElementById('priceChart');
+    if (priceCtx) {
+        priceChart = new Chart(priceCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '收盘价',
+                    data: [],
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+    }
+
+    const volumeCtx = document.getElementById('volumeChart');
+    if (volumeCtx) {
+        volumeChart = new Chart(volumeCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: '成交量',
+                    data: [],
+                    backgroundColor: 'rgba(139, 92, 246, 0.6)',
+                    borderColor: '#8b5cf6',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+    }
+
+    const kdjCtx = document.getElementById('kdjChart');
+    if (kdjCtx) {
+        kdjChart = new Chart(kdjCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'K', data: [], borderColor: '#06b6d4', tension: 0.4, borderWidth: 2, fill: false },
+                    { label: 'D', data: [], borderColor: '#8b5cf6', tension: 0.4, borderWidth: 2, fill: false },
+                    { label: 'J', data: [], borderColor: '#22c55e', tension: 0.4, borderWidth: 2, fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+    }
+
+    const macdCtx = document.getElementById('macdChart');
+    if (macdCtx) {
+        macdChart = new Chart(macdCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    { type: 'bar', label: 'MACD柱', data: [], backgroundColor: [], borderRadius: 4 },
+                    { type: 'line', label: 'DIF', data: [], borderColor: '#06b6d4', tension: 0.4, borderWidth: 2, fill: false },
+                    { type: 'line', label: 'DEA', data: [], borderColor: '#8b5cf6', tension: 0.4, borderWidth: 2, fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+    }
 }
 
 async function loadData() {
@@ -224,22 +293,16 @@ async function loadData() {
         showMessage('请先输入股票代码！', 'warning');
         return;
     }
-    
-    showLoading(true);
-    
+
     try {
-        // 首先尝试获取数据
         let data = await safeFetch(`/api/v1/indicators/${stockCode}`);
         
-        // 如果没有数据，尝试调用 fetch_and_save 来获取真实数据
         if (!data || data.length === 0) {
             showMessage('正在从真实数据源获取数据，请稍候...', 'info');
-            // 调用获取并保存数据的接口
             await safeFetch(`/api/v1/stocks/fetch/${stockCode}`, { 
                 method: 'POST',
                 skipCache: true 
             });
-            // 再次获取数据
             data = await safeFetch(`/api/v1/indicators/${stockCode}`, { skipCache: true });
         }
         
@@ -249,55 +312,64 @@ async function loadData() {
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
         } else {
             showMessage('暂无数据，请尝试其他股票代码或稍后重试', 'warning');
-            document.getElementById('signalsContainer').innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-state-icon">📊</span>
-                    <p>该股票暂无数据，请尝试其他代码！</p>
-                    <p style="font-size: 13px; color: #64748b; margin-top: 10px;">
-                        💡 提示：尝试 000001(上证指数), 399001(深证成指), 600519(贵州茅台) 等
-                    </p>
-                </div>
-            `;
+            const signalsContainer = document.getElementById('signalsContainer');
+            if (signalsContainer) {
+                signalsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <span class="empty-state-icon">📊</span>
+                        <p>该股票暂无数据，请尝试其他代码</p>
+                    </div>
+                `;
+            }
         }
     } catch (error) {
         console.error('加载数据失败:', error);
         showMessage('加载数据失败: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
-async function generateSampleData() {
-    const stockCode = document.getElementById('stockCode').value.trim();
-    
-    if (!stockCode) {
-        showMessage('请先输入股票代码！', 'warning');
-        return;
+function updateCharts(data) {
+    if (!data || data.length === 0) return;
+
+    const labels = data.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
+    const closes = data.map(d => d.close_price);
+    const volumes = data.map(d => d.volume);
+    const kValues = data.map(d => d.kdj_k);
+    const dValues = data.map(d => d.kdj_d);
+    const jValues = data.map(d => d.kdj_j);
+    const difValues = data.map(d => d.macd_dif);
+    const deaValues = data.map(d => d.macd_dea);
+    const macdHistogram = data.map(d => d.macd_histogram);
+
+    if (priceChart) {
+        priceChart.data.labels = labels;
+        priceChart.data.datasets[0].data = closes;
+        priceChart.update('none');
     }
-    
-    showLoading(true);
-    
-    try {
-        const result = await safeFetch(`/api/v1/sample/generate/${stockCode}`, { 
-            method: 'POST', 
-            skipCache: true 
-        });
-        
-        if (result.success) {
-            showMessage(result.message || '示例数据生成成功！', 'success');
-            loadData();
-            // 通知其他客户端刷新
-            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-                wsConnection.send(JSON.stringify({ type: 'refresh' }));
-            }
-        } else {
-            showMessage(result.message || '生成数据失败', 'error');
-        }
-    } catch (error) {
-        console.error('生成数据失败:', error);
-        showMessage('生成数据失败: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
+
+    if (volumeChart) {
+        volumeChart.data.labels = labels;
+        volumeChart.data.datasets[0].data = volumes;
+        volumeChart.update('none');
+    }
+
+    if (kdjChart) {
+        kdjChart.data.labels = labels;
+        kdjChart.data.datasets[0].data = kValues;
+        kdjChart.data.datasets[1].data = dValues;
+        kdjChart.data.datasets[2].data = jValues;
+        kdjChart.update('none');
+    }
+
+    if (macdChart) {
+        macdChart.data.labels = labels;
+        macdChart.data.datasets[0].data = macdHistogram;
+        macdChart.data.datasets[0].backgroundColor = macdHistogram.map(v => 
+            v >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+        );
+        macdChart.data.datasets[1].data = difValues;
+        macdChart.data.datasets[2].data = deaValues;
+        macdChart.update('none');
     }
 }
 
@@ -307,18 +379,22 @@ async function loadSignals(stockCode) {
         displaySignals(result.signals);
     } catch (error) {
         console.error('加载信号失败:', error);
-        document.getElementById('signalsContainer').innerHTML = `
-            <div class="empty-state">
-                <span class="empty-state-icon">⚠️</span>
-                <p>加载信号失败，请刷新重试</p>
-            </div>
-        `;
+        const signalsContainer = document.getElementById('signalsContainer');
+        if (signalsContainer) {
+            signalsContainer.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-state-icon">⚠️</span>
+                    <p>加载信号失败，请刷新重试</p>
+                </div>
+            `;
+        }
     }
 }
 
 function displaySignals(signals) {
     const container = document.getElementById('signalsContainer');
-    
+    if (!container) return;
+
     if (!signals || signals.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -328,14 +404,14 @@ function displaySignals(signals) {
         `;
         return;
     }
-    
+
     container.innerHTML = signals.map(signal => `
         <div class="signal-card ${signal.type}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <strong style="font-size: 18px;">${signal.type === 'buy' ? '📈 买入信号' : '📉 卖出信号'}</strong>
                 <span style="color: #94a3b8; font-size: 13px;">${signal.indicator}</span>
             </div>
-            <p style="font-size: 16px; margin-bottom: 8px;">价格: <strong style="color: ${signal.type === 'buy' ? '#10b981' : '#ef4444'};">¥${signal.price.toFixed(2)}</strong></p>
+            <p style="font-size: 16px; margin-bottom: 8px;">价格: <strong style="color: ${signal.type === 'buy' ? '#22c55e' : '#ef4444'};">¥${signal.price.toFixed(2)}</strong></p>
             <p style="color: #94a3b8; font-size: 13px; line-height: 1.6;">${signal.reason}</p>
             <p style="color: #64748b; font-size: 12px; margin-top: 12px;">${signal.datetime}</p>
         </div>
@@ -344,335 +420,13 @@ function displaySignals(signals) {
 
 const style = document.createElement('style');
 style.textContent = `
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    @keyframes slideInRight {
+    @keyframes slideIn {
         from { transform: translateX(100px); opacity: 0; }
         to { transform: translateX(0); opacity: 1; }
     }
-    @keyframes slideOutRight {
+    @keyframes slideOut {
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100px); opacity: 0; }
     }
-    .signal-card {
-        transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
-    }
-    .signal-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
-    }
 `;
 document.head.appendChild(style);
-
-// ===== Options Functions =====
-async function loadOptionData() {
-    const stockCode = document.getElementById('stockCode').value.trim();
-    
-    if (!stockCode) {
-        showMessage('请先输入股票代码！', 'warning');
-        return;
-    }
-    
-    // Show loading state
-    document.getElementById('optionSummary').innerHTML = `
-        <div class="empty-state" style="padding: 40px;">
-            <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(0,240,255,0.2); border-top: 4px solid #00f0ff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <p style="margin-top: 16px; color: #94a3b8;">正在加载期权数据...</p>
-        </div>
-    `;
-    
-    try {
-        // Load option chain and summary in parallel
-        const [chainData, summary] = await Promise.all([
-            safeFetch(`/api/v1/options/chain/${stockCode}`),
-            safeFetch(`/api/v1/options/chain/${stockCode}/summary`)
-        ]);
-        
-        currentOptionData = chainData;
-        
-        // Update expire date select
-        updateExpireDateSelect(currentOptionData.expire_dates);
-        
-        // Display data
-        displayOptionSummary(summary);
-        displayOptionChain(currentOptionData);
-        drawOptionRatioChart(summary);
-        
-        // Show refresh button
-        document.getElementById('loadOptionsBtn').style.display = 'none';
-        document.getElementById('refreshOptionsBtn').style.display = 'inline-block';
-        
-        showMessage('期权数据加载成功！', 'success');
-    } catch (error) {
-        console.error('加载期权数据失败:', error);
-        document.getElementById('optionSummary').innerHTML = `
-            <div class="empty-state">
-                <span class="empty-state-icon">⚠️</span>
-                <p>加载期权数据失败，请重试</p>
-            </div>
-        `;
-        showMessage('加载期权数据失败: ' + error.message, 'error');
-    }
-}
-
-function updateExpireDateSelect(expireDates) {
-    const select = document.getElementById('expireDateSelect');
-    select.innerHTML = '<option value="">全部</option>';
-    
-    if (expireDates && expireDates.length > 0) {
-        expireDates.forEach(date => {
-            const option = document.createElement('option');
-            option.value = date;
-            option.textContent = date;
-            select.appendChild(option);
-        });
-    }
-}
-
-function displayOptionSummary(summary) {
-    const container = document.getElementById('optionSummary');
-    
-    const callPutVolumeRatio = summary.call_put_volume_ratio ? summary.call_put_volume_ratio.toFixed(2) : '0.00';
-    const callPutOiRatio = summary.call_put_oi_ratio ? summary.call_put_oi_ratio.toFixed(2) : '0.00';
-    
-    container.innerHTML = `
-        <div class="option-summary-grid">
-            <div class="option-summary-item call">
-                <div class="option-summary-label">📈 看涨总成交量</div>
-                <div class="option-summary-value call">${formatNumber(summary.total_call_volume || 0)}</div>
-            </div>
-            <div class="option-summary-item put">
-                <div class="option-summary-label">📉 看跌总成交量</div>
-                <div class="option-summary-value put">${formatNumber(summary.total_put_volume || 0)}</div>
-            </div>
-            <div class="option-summary-item call">
-                <div class="option-summary-label">📈 看涨持仓量</div>
-                <div class="option-summary-value call">${formatNumber(summary.total_call_oi || 0)}</div>
-            </div>
-            <div class="option-summary-item put">
-                <div class="option-summary-label">📉 看跌持仓量</div>
-                <div class="option-summary-value put">${formatNumber(summary.total_put_oi || 0)}</div>
-            </div>
-        </div>
-        <div class="option-summary-grid">
-            <div class="option-summary-item ${callPutVolumeRatio >= 1 ? 'call' : 'put'}">
-                <div class="option-summary-label">📊 看多看空比(成交量)</div>
-                <div class="option-summary-value ${callPutVolumeRatio >= 1 ? 'call' : 'put'}">${callPutVolumeRatio}</div>
-                <div class="option-summary-sub">>1 偏多，<1 偏空</div>
-            </div>
-            <div class="option-summary-item ${callPutOiRatio >= 1 ? 'call' : 'put'}">
-                <div class="option-summary-label">📊 看多看空比(持仓)</div>
-                <div class="option-summary-value ${callPutOiRatio >= 1 ? 'call' : 'put'}">${callPutOiRatio}</div>
-                <div class="option-summary-sub">>1 偏多，<1 偏空</div>
-            </div>
-        </div>
-        <div class="option-summary-item neutral">
-            <div class="option-summary-label">💡 最大痛点价位</div>
-            <div class="option-summary-value">${summary.max_pain_strike ? summary.max_pain_strike.toFixed(2) : '-'}</div>
-            <div class="option-summary-sub">标的价格: ¥${summary.stock_price ? summary.stock_price.toFixed(2) : '-'}</div>
-        </div>
-    `;
-}
-
-function displayOptionChain(data) {
-    const tbody = document.getElementById('optionChainBody');
-    const calls = data.calls || [];
-    const puts = data.puts || [];
-    const stockPrice = data.stock_price || 0;
-    
-    // 如果没有期权数据，显示友好提示
-    if (calls.length === 0 && puts.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="19">
-                    <div class="empty-state" style="padding: 40px;">
-                        <span class="empty-state-icon">📊</span>
-                        <p>暂无期权数据，或该标的暂无期权交易</p>
-                        <p style="font-size: 14px; color: var(--text-secondary); margin-top: 10px;">
-                            💡 提示: 请尝试期权标的: 510300(沪深300ETF), 510500(中证500ETF), 510050(上证50ETF)
-                        </p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    // Group options by strike price
-    const strikeMap = new Map();
-    
-    calls.forEach(call => {
-        if (!strikeMap.has(call.strike_price)) {
-            strikeMap.set(call.strike_price, { call: null, put: null });
-        }
-        strikeMap.get(call.strike_price).call = call;
-    });
-    
-    puts.forEach(put => {
-        if (!strikeMap.has(put.strike_price)) {
-            strikeMap.set(put.strike_price, { call: null, put: null });
-        }
-        strikeMap.get(put.strike_price).put = put;
-    });
-    
-    // Sort by strike price
-    const sortedStrikes = Array.from(strikeMap.keys()).sort((a, b) => a - b);
-    
-    if (sortedStrikes.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="19">
-                    <div class="empty-state" style="padding: 40px;">
-                        <span class="empty-state-icon">📊</span>
-                        <p>暂无期权数据</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = sortedStrikes.map(strike => {
-        const pair = strikeMap.get(strike);
-        const call = pair.call;
-        const put = pair.put;
-        
-        // Determine ITM/ATM/OTM
-        const isCallITM = call && stockPrice > strike;
-        const isPutITM = put && stockPrice < strike;
-        
-        let rowClass = 'option-row';
-        if (isCallITM) rowClass += ' itm-call';
-        if (isPutITM) rowClass += ' itm-put';
-        
-        return `
-            <tr class="${rowClass}">
-                <!-- Call Side -->
-                <td class="option-code">${call ? call.option_code : '-'}</td>
-                <td class="option-price ${call && call.change_percent >= 0 ? 'up' : 'down'}">${call ? call.latest_price.toFixed(2) : '-'}</td>
-                <td class="option-change ${call && call.change_percent >= 0 ? 'up' : 'down'}">${call ? (call.change_percent >= 0 ? '+' : '') + call.change_percent.toFixed(2) + '%' : '-'}</td>
-                <td class="option-bid">${call ? call.bid_price.toFixed(2) : '-'}</td>
-                <td class="option-bid">${call ? formatNumber(call.bid_volume) : '-'}</td>
-                <td class="option-ask">${call ? call.ask_price.toFixed(2) : '-'}</td>
-                <td class="option-ask">${call ? formatNumber(call.ask_volume) : '-'}</td>
-                <td class="option-volume">${call ? formatNumber(call.volume) : '-'}</td>
-                <td class="option-oi">${call ? formatNumber(call.open_interest) : '-'}</td>
-                
-                <!-- Strike Price -->
-                <td class="strike-col">${strike.toFixed(2)}</td>
-                
-                <!-- Put Side -->
-                <td class="option-oi">${put ? formatNumber(put.open_interest) : '-'}</td>
-                <td class="option-volume">${put ? formatNumber(put.volume) : '-'}</td>
-                <td class="option-ask">${put ? formatNumber(put.ask_volume) : '-'}</td>
-                <td class="option-ask">${put ? put.ask_price.toFixed(2) : '-'}</td>
-                <td class="option-bid">${put ? formatNumber(put.bid_volume) : '-'}</td>
-                <td class="option-bid">${put ? put.bid_price.toFixed(2) : '-'}</td>
-                <td class="option-change ${put && put.change_percent >= 0 ? 'up' : 'down'}">${put ? (put.change_percent >= 0 ? '+' : '') + put.change_percent.toFixed(2) + '%' : '-'}</td>
-                <td class="option-price ${put && put.change_percent >= 0 ? 'up' : 'down'}">${put ? put.latest_price.toFixed(2) : '-'}</td>
-                <td class="option-code">${put ? put.option_code : '-'}</td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function filterOptionData() {
-    if (!currentOptionData) return;
-    
-    const selectedExpire = document.getElementById('expireDateSelect').value;
-    
-    let filteredCalls = currentOptionData.calls || [];
-    let filteredPuts = currentOptionData.puts || [];
-    
-    if (selectedExpire) {
-        filteredCalls = filteredCalls.filter(c => c.expire_date === selectedExpire);
-        filteredPuts = filteredPuts.filter(p => p.expire_date === selectedExpire);
-    }
-    
-    displayOptionChain({
-        ...currentOptionData,
-        calls: filteredCalls,
-        puts: filteredPuts
-    });
-}
-
-function drawOptionRatioChart(summary) {
-    const ctx = document.getElementById('optionRatioChart').getContext('2d');
-    
-    if (optionRatioChart) {
-        optionRatioChart.destroy();
-    }
-    
-    optionRatioChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['成交量', '持仓量'],
-            datasets: [
-                {
-                    label: '看涨',
-                    data: [summary.total_call_volume || 0, summary.total_call_oi || 0],
-                    backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                    borderColor: 'rgba(16, 185, 129, 1)',
-                    borderWidth: 2,
-                    borderRadius: 8
-                },
-                {
-                    label: '看跌',
-                    data: [summary.total_put_volume || 0, summary.total_put_oi || 0],
-                    backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                    borderColor: 'rgba(239, 68, 68, 1)',
-                    borderWidth: 2,
-                    borderRadius: 8
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#94a3b8',
-                        font: {
-                            size: 12,
-                            weight: '600'
-                        },
-                        padding: 16
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#94a3b8'
-                    }
-                },
-                x: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#94a3b8',
-                        font: {
-                            weight: '600'
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function formatNumber(num) {
-    if (num === null || num === undefined) return '-';
-    if (num >= 10000) {
-        return (num / 10000).toFixed(1) + '万';
-    }
-    return num.toLocaleString();
-}
