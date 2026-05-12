@@ -1,13 +1,13 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
-from app.crawlers.sina import SinaCrawler
-from app.crawlers.eastmoney import EastMoneyCrawler
+from app.crawlers.akshare_crawler import AkshareCrawler
 from app.crawlers.data_processor import DataProcessor
 from app.core.database import SessionLocal
 from app.models.stock_data import StockData
+from sqlalchemy import desc
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +16,7 @@ logger = logging.getLogger(__name__)
 class CrawlerScheduler:
     def __init__(self):
         self.scheduler = BackgroundScheduler()
-        self.sina_crawler = SinaCrawler()
-        self.eastmoney_crawler = EastMoneyCrawler()
+        self.akshare_crawler = AkshareCrawler()
         self.data_processor = DataProcessor()
         self.monitored_stocks: List[str] = []
         self.is_running = False
@@ -68,21 +67,28 @@ class CrawlerScheduler:
                 logger.error(f"爬取股票 {stock_code} 失败: {e}")
     
     def _crawl_single_stock(self, stock_code: str):
-        sina_data = self.sina_crawler.fetch_stock_data(stock_code, period="1d")
-        eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period="1d")
-        
-        data_list = []
-        if not sina_data.empty:
-            data_list.append(sina_data)
-        if not eastmoney_data.empty:
-            data_list.append(eastmoney_data)
-        
-        if data_list:
-            averaged_data = self.data_processor.average_data(data_list)
-            cleaned_data = self.data_processor.clean_data(averaged_data)
-            self._save_to_database(cleaned_data)
+        # 获取最新日期，做增量更新
+        db = SessionLocal()
+        try:
+            latest = db.query(StockData).filter(
+                StockData.stock_code == stock_code,
+                StockData.period == "1d"
+            ).order_by(desc(StockData.datetime)).first()
             
-            logger.info(f"股票 {stock_code} 数据已保存")
+            start_date = None
+            if latest:
+                start_date = (latest.datetime + timedelta(days=1)).strftime("%Y%m%d")
+            
+            akshare_data = self.akshare_crawler.fetch_stock_data(
+                stock_code, period="1d", start_date=start_date
+            )
+            
+            if not akshare_data.empty:
+                cleaned_data = self.data_processor.clean_data(akshare_data)
+                self._save_to_database(cleaned_data)
+                logger.info(f"股票 {stock_code} 数据已保存: {len(cleaned_data)}条")
+        finally:
+            db.close()
     
     def _save_to_database(self, df):
         if df.empty:
@@ -109,7 +115,7 @@ class CrawlerScheduler:
                         close_price=row['close_price'],
                         volume=row['volume'],
                         amount=row.get('amount'),
-                        source=row.get('source')
+                        source=row.get('source', 'akshare')
                     )
                     db.add(stock_data)
             
