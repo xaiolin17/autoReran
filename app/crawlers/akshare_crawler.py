@@ -90,6 +90,13 @@ class AkshareCrawler(BaseCrawler):
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
             
+            # Check if start_date > end_date - if yes, return empty DataFrame
+            start_dt = datetime.strptime(start_date, "%Y%m%d")
+            end_dt = datetime.strptime(end_date, "%Y%m%d")
+            if start_dt > end_dt:
+                logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
+                return pd.DataFrame()
+            
             # 提取纯数字代码，去除 sh/sz 前缀
             code = index_code[2:] if len(index_code) > 2 else index_code
             
@@ -168,6 +175,13 @@ class AkshareCrawler(BaseCrawler):
             
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
+            
+            # Check if start_date > end_date - if yes, return empty DataFrame
+            start_dt = datetime.strptime(start_date, "%Y%m%d")
+            end_dt = datetime.strptime(end_date, "%Y%m%d")
+            if start_dt > end_dt:
+                logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
+                return pd.DataFrame()
             
             # 确定市场并添加前缀
             if stock_code.startswith(('600', '601', '603', '605', '688')):

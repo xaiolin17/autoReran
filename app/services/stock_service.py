@@ -80,8 +80,16 @@ class StockService:
     ) -> List[StockData]:
         if incremental:
             latest_date = self.get_latest_date(stock_code, period)
+            today = datetime.now().date()
+            
             if latest_date:
-                start_date = (latest_date + timedelta(days=1)).strftime("%Y%m%d")
+                latest_date_only = latest_date.date()
+                if latest_date_only >= today:
+                    # Already have data up to today or later, no need to fetch
+                    logger.info(f"已有数据已是最新 (截止 {latest_date_only}，无需更新")
+                    return []
+                
+                start_date = (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
                 logger.info(f"增量更新: 从 {start_date} 开始获取 {stock_code} {period} 数据")
         
         if historical:
