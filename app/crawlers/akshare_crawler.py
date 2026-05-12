@@ -1,4 +1,5 @@
 import pandas as pd
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from app.crawlers.base import BaseCrawler
@@ -17,6 +18,25 @@ class AkshareCrawler(BaseCrawler):
     
     def __init__(self):
         self.available = AKSHARE_AVAILABLE
+        self.max_retries = 3
+        self.retry_delay = 2  # seconds
+    
+    def _retry_fetch(self, fetch_func, *args, **kwargs):
+        """Retry helper with exponential backoff"""
+        last_exception = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                result = fetch_func(*args, **kwargs)
+                return result
+            except Exception as e:
+                last_exception = e
+                wait_time = self.retry_delay * (2 ** attempt)
+                logger.warning(f"Attempt {attempt + 1}/{self.max_retries} failed: {str(e)}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+        
+        logger.error(f"All {self.max_retries} attempts failed. Last error: {str(last_exception)}")
+        return None
     
     def fetch_stock_data(self, stock_code: str, period: str = "1d", 
                         start_date: Optional[str] = None, 
@@ -60,8 +80,13 @@ class AkshareCrawler(BaseCrawler):
                           start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
         """获取指数数据"""
         try:
-            if start_date is None:
+            # If we have end_date but no start_date (loading historical data), set start_date to 10 years earlier
+            if start_date is None and end_date is not None:
+                end_dt = datetime.strptime(end_date, "%Y%m%d")
+                start_date = (end_dt - timedelta(days=3650)).strftime("%Y%m%d")  # 10 years back
+            elif start_date is None:
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
             
@@ -70,17 +95,37 @@ class AkshareCrawler(BaseCrawler):
             
             # 根据周期选择不同的 API
             if period == "1d":
-                df = ak.index_zh_a_hist(symbol=code, period="daily", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.index_zh_a_hist,
+                    symbol=code, 
+                    period="daily", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             elif period == "1w":
-                df = ak.index_zh_a_hist(symbol=code, period="weekly", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.index_zh_a_hist,
+                    symbol=code, 
+                    period="weekly", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             elif period == "1M":
-                df = ak.index_zh_a_hist(symbol=code, period="monthly", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.index_zh_a_hist,
+                    symbol=code, 
+                    period="monthly", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             else:
-                df = ak.index_zh_a_hist_min_em(symbol=index_code, period="60", 
-                                              start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.index_zh_a_hist_min_em,
+                    symbol=index_code, 
+                    period="60", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             
             if df is None or df.empty:
                 logger.warning(f"AkShare 返回空数据: index={index_code}, period={period}")
@@ -114,8 +159,13 @@ class AkshareCrawler(BaseCrawler):
                           start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
         """获取股票数据"""
         try:
-            if start_date is None:
+            # If we have end_date but no start_date (loading historical data), set start_date to 10 years earlier
+            if start_date is None and end_date is not None:
+                end_dt = datetime.strptime(end_date, "%Y%m%d")
+                start_date = (end_dt - timedelta(days=3650)).strftime("%Y%m%d")  # 10 years back
+            elif start_date is None:
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
             
@@ -127,17 +177,37 @@ class AkshareCrawler(BaseCrawler):
             
             # 根据周期选择不同的 API
             if period == "1d":
-                df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.stock_zh_a_hist,
+                    symbol=stock_code, 
+                    period="daily", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             elif period == "1w":
-                df = ak.stock_zh_a_hist(symbol=stock_code, period="weekly", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.stock_zh_a_hist,
+                    symbol=stock_code, 
+                    period="weekly", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             elif period == "1M":
-                df = ak.stock_zh_a_hist(symbol=stock_code, period="monthly", 
-                                       start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.stock_zh_a_hist,
+                    symbol=stock_code, 
+                    period="monthly", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             else:
-                df = ak.stock_zh_a_hist_min_em(symbol=symbol, period="60", 
-                                              start_date=start_date, end_date=end_date)
+                df = self._retry_fetch(
+                    ak.stock_zh_a_hist_min_em,
+                    symbol=symbol, 
+                    period="60", 
+                    start_date=start_date, 
+                    end_date=end_date
+                )
             
             if df is None or df.empty:
                 logger.warning(f"AkShare 返回空数据: stock={stock_code}, period={period}")
