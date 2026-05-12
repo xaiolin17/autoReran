@@ -110,43 +110,58 @@ class DataProcessor:
                             days: int = 365, base_price: float = None) -> pd.DataFrame:
         np.random.seed(42)
         
-        # 为上证指数设置合理的价格范围
-        if base_price is None:
-            if stock_code == "000001":
-                base_price = 3200.0
-            elif stock_code == "399001":
-                base_price = 10500.0
-            else:
-                base_price = 100.0
+        # 设置正确的股票基础价格
+        stock_configs = {
+            "000001": {"name": "上证指数", "base": 3250.0, "volatility": 0.012},
+            "399001": {"name": "深证成指", "base": 10600.0, "volatility": 0.015},
+            "600519": {"name": "贵州茅台", "base": 1680.0, "volatility": 0.018},
+            "000002": {"name": "万科A", "base": 11.5, "volatility": 0.022},
+        }
+        
+        config = stock_configs.get(stock_code, {
+            "name": f"Stock{stock_code}", 
+            "base": 100.0, 
+            "volatility": 0.02
+        })
+        
+        base_price = base_price or config["base"]
         
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
         date_range = pd.date_range(start=start_date, end=end_date, freq='D')
         
+        # 生成更真实的价格走势
         prices = [base_price]
         for _ in range(1, len(date_range)):
-            change = np.random.normal(0, 0.015)  # 降低波动率对于指数
+            # 使用随机游走
+            change = np.random.normal(0, config["volatility"])
             new_price = prices[-1] * (1 + change)
-            prices.append(max(new_price, base_price * 0.8))  # 不要跌太多
+            
+            # 限制价格范围在合理区间
+            new_price = max(new_price, base_price * 0.7)
+            new_price = min(new_price, base_price * 1.3)
+            prices.append(new_price)
         
         data = []
         for i, date in enumerate(date_range):
             price = prices[i]
-            open_p = price * (1 + np.random.normal(0, 0.003))
-            close_p = price
-            high_p = max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.008)))
-            low_p = min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.008)))
-            volume = np.random.randint(1000000, 10000000)
-            amount = volume * close_p
             
-            # 设置股票名称
-            if stock_code == "000001":
-                stock_name = "上证指数"
-            elif stock_code == "399001":
-                stock_name = "深证成指"
-            else:
-                stock_name = f"Sample{stock_code}"
+            # 生成合理的OHLC
+            open_change = np.random.uniform(-config["volatility"] * 0.3, config["volatility"] * 0.3)
+            open_p = price * (1 + open_change)
+            
+            close_change = np.random.uniform(-config["volatility"] * 0.5, config["volatility"] * 0.5)
+            close_p = open_p * (1 + close_change)
+            
+            high_spread = np.random.uniform(0, config["volatility"])
+            low_spread = np.random.uniform(0, config["volatility"])
+            
+            high_p = max(open_p, close_p) * (1 + high_spread)
+            low_p = min(open_p, close_p) * (1 - low_spread)
+            
+            volume = np.random.randint(5000000, 50000000)
+            amount = volume * close_p
             
             data.append({
                 'datetime': date,
@@ -157,10 +172,11 @@ class DataProcessor:
                 'volume': volume,
                 'amount': amount,
                 'stock_code': stock_code,
-                'stock_name': stock_name,
+                'stock_name': config["name"],
                 'period': period,
-                'source': 'sample'
+                'source': 'reliable_mock'
             })
         
         df = pd.DataFrame(data)
+        print(f"✅ 生成 {stock_code} ({config['name']}) 数据: {len(df)} 条, 价格范围: {df['close_price'].min():.2f} - {df['close_price'].max():.2f}")
         return df

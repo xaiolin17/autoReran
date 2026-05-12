@@ -3,14 +3,17 @@ from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, SessionLocal
 from app.core.logger import logger
 from app.core.monitoring import metrics_middleware, get_metrics
 from app.core.serialization import ORJSONResponse
 from app.core.security_middleware import setup_security_middleware
 from app.core.websocket_manager import manager as ws_manager
 from app.api.v1 import api_router
+from app.models.stock_data import StockData
+from app.services.stock_service import StockService
 
 
 Base.metadata.create_all(bind=engine)
@@ -99,6 +102,66 @@ async def metrics():
 @app.on_event("startup")
 async def startup_event():
     logger.info(f"{settings.PROJECT_NAME} 启动成功")
+    
+    # 初始化默认数据
+    try:
+        await init_default_data()
+    except Exception as e:
+        logger.error(f"初始化数据失败: {e}")
+
+
+async def init_default_data():
+    """初始化默认股票数据"""
+    db = SessionLocal()
+    try:
+        # 检查是否已有上证指数数据
+        stmt = select(StockData).where(
+            StockData.stock_code == "000001",
+            StockData.period == "1d"
+        ).limit(1)
+        result = db.execute(stmt)
+        exists = result.scalar_one_or_none() is not None
+        
+        if not exists:
+            logger.info("正在初始化默认数据...")
+            stock_service = StockService(db)
+            
+            # 上证指数
+            stock_service.fetch_and_save_stock_data("000001", "1d")
+            stock_service.fetch_and_save_stock_data("000001", "1h")
+            stock_service.fetch_and_save_stock_data("000001", "1w")
+            stock_service.fetch_and_save_stock_data("000001", "1M")
+            
+            # 深证成指
+            stock_service.fetch_and_save_stock_data("399001", "1d")
+            
+            logger.info("✅ 默认数据初始化完成")
+        else:
+            # 验证现有数据价格是否合理
+            stmt_check = select(StockData).where(
+                StockData.stock_code == "000001",
+                StockData.period == "1d"
+            ).limit(1)
+            check_result = db.execute(stmt_check)
+            check_data = check_result.scalar_one_or_none()
+            
+            if check_data and check_data.close_price < 2000:
+                logger.warning("检测到旧数据，重新初始化...")
+                db.query(StockData).where(StockData.stock_code == "000001").delete()
+                db.query(StockData).where(StockData.stock_code == "399001").delete()
+                db.commit()
+                
+                stock_service = StockService(db)
+                stock_service.fetch_and_save_stock_data("000001", "1d")
+                stock_service.fetch_and_save_stock_data("000001", "1h")
+                stock_service.fetch_and_save_stock_data("000001", "1w")
+                stock_service.fetch_and_save_stock_data("000001", "1M")
+                stock_service.fetch_and_save_stock_data("399001", "1d")
+                logger.info("✅ 数据重新初始化完成")
+            else:
+                logger.info("✅ 默认数据已存在且有效")
+    finally:
+        db.close()
 
 
 @app.on_event("shutdown")
