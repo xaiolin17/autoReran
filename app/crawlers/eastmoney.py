@@ -2,8 +2,10 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+import time
 from app.crawlers.base import BaseCrawler
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class EastMoneyCrawler(BaseCrawler):
@@ -13,33 +15,52 @@ class EastMoneyCrawler(BaseCrawler):
     def fetch_stock_data(self, stock_code: str, period: str = "1d", 
                         start_date: Optional[str] = None, 
                         end_date: Optional[str] = None) -> pd.DataFrame:
-        try:
-            secid = self._convert_code(stock_code)
-            klt = self._get_klt(period)
-            
-            if start_date is None:
-                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
-            if end_date is None:
-                end_date = datetime.now().strftime("%Y%m%d")
-            
-            params = {
-                'secid': secid,
-                'klt': klt,
-                'fqt': 1,
-                'beg': start_date,
-                'end': end_date,
-                '_': int(datetime.now().timestamp())
-            }
-            
-            response = requests.get(self.base_url, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                return self._parse_data(data, stock_code, period)
-            return pd.DataFrame()
-        except Exception as e:
-            print(f"东方财富爬虫错误: {e}")
-            return pd.DataFrame()
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                secid = self._convert_code(stock_code)
+                klt = self._get_klt(period)
+                
+                if start_date is None:
+                    start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+                if end_date is None:
+                    end_date = datetime.now().strftime("%Y%m%d")
+                
+                params = {
+                    'secid': secid,
+                    'klt': klt,
+                    'fqt': 1,
+                    'beg': start_date,
+                    'end': end_date,
+                    '_': int(datetime.now().timestamp())
+                }
+                
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                
+                response = requests.get(self.base_url, params=params, headers=headers, timeout=15)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    df = self._parse_data(data, stock_code, period)
+                    if not df.empty:
+                        logger.info(f"东方财富获取 {stock_code} {period} 数据: {len(df)} 条")
+                        return df
+                
+                if attempt < max_retries - 1:
+                    logger.warning(f"东方财富 {stock_code} 第 {attempt + 1} 次尝试失败，等待 {retry_delay} 秒后重试")
+                    time.sleep(retry_delay)
+                    
+            except Exception as e:
+                logger.error(f"东方财富爬虫错误 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+        
+        logger.error(f"东方财富爬虫 {stock_code} 获取失败，已重试 {max_retries} 次")
+        return pd.DataFrame()
     
     def fetch_realtime_data(self, stock_code: str) -> Dict:
         try:
@@ -73,7 +94,13 @@ class EastMoneyCrawler(BaseCrawler):
         ]
     
     def _convert_code(self, stock_code: str) -> str:
-        if stock_code.startswith(('600', '601', '603', '605', '688')):
+        # 特殊处理：上证指数 000001 应该是 1.000001
+        if stock_code == "000001":
+            return "1.000001"
+        # 深证成指
+        elif stock_code == "399001":
+            return "0.399001"
+        elif stock_code.startswith(('600', '601', '603', '605', '688')):
             return f"1.{stock_code}"
         else:
             return f"0.{stock_code}"

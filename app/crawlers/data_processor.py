@@ -107,8 +107,17 @@ class DataProcessor:
     
     @staticmethod
     def generate_sample_data(stock_code: str, period: str = "1d", 
-                            days: int = 365, base_price: float = 100.0) -> pd.DataFrame:
+                            days: int = 365, base_price: float = None) -> pd.DataFrame:
         np.random.seed(42)
+        
+        # 为上证指数设置合理的价格范围
+        if base_price is None:
+            if stock_code == "000001":
+                base_price = 3200.0
+            elif stock_code == "399001":
+                base_price = 10500.0
+            else:
+                base_price = 100.0
         
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
@@ -117,19 +126,27 @@ class DataProcessor:
         
         prices = [base_price]
         for _ in range(1, len(date_range)):
-            change = np.random.normal(0, 0.02)
+            change = np.random.normal(0, 0.015)  # 降低波动率对于指数
             new_price = prices[-1] * (1 + change)
-            prices.append(max(new_price, base_price * 0.5))
+            prices.append(max(new_price, base_price * 0.8))  # 不要跌太多
         
         data = []
         for i, date in enumerate(date_range):
             price = prices[i]
-            open_p = price * (1 + np.random.normal(0, 0.005))
+            open_p = price * (1 + np.random.normal(0, 0.003))
             close_p = price
-            high_p = max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.01)))
-            low_p = min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.01)))
+            high_p = max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.008)))
+            low_p = min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.008)))
             volume = np.random.randint(1000000, 10000000)
             amount = volume * close_p
+            
+            # 设置股票名称
+            if stock_code == "000001":
+                stock_name = "上证指数"
+            elif stock_code == "399001":
+                stock_name = "深证成指"
+            else:
+                stock_name = f"Sample{stock_code}"
             
             data.append({
                 'datetime': date,
@@ -140,7 +157,7 @@ class DataProcessor:
                 'volume': volume,
                 'amount': amount,
                 'stock_code': stock_code,
-                'stock_name': f"Sample{stock_code}",
+                'stock_name': stock_name,
                 'period': period,
                 'source': 'sample'
             })

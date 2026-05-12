@@ -85,24 +85,27 @@ class StockService:
     ) -> List[StockData]:
         logger.info(f"开始获取股票 {stock_code} 数据")
         
-        sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+        # 优先使用东方财富数据源（有完整的历史数据）
         eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
         
         data_list = []
-        if not sina_data.empty:
-            data_list.append(sina_data)
-            logger.debug(f"新浪数据源: {len(sina_data)} 条")
         if not eastmoney_data.empty:
             data_list.append(eastmoney_data)
             logger.debug(f"东方财富数据源: {len(eastmoney_data)} 条")
+        else:
+            # 东方财富失败时尝试新浪
+            sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+            if not sina_data.empty:
+                data_list.append(sina_data)
+                logger.debug(f"新浪数据源: {len(sina_data)} 条")
         
         if not data_list:
             logger.warning("无数据源，生成示例数据")
-            sample_data = self.data_processor.generate_sample_data(stock_code, period)
+            sample_data = self.data_processor.generate_sample_data(stock_code, period, base_price=3200.0 if stock_code == "000001" else 100.0)
             data_list.append(sample_data)
         
-        averaged_data = self.data_processor.average_data(data_list)
-        cleaned_data = self.data_processor.clean_data(averaged_data)
+        # 使用单一数据而不是平均
+        cleaned_data = self.data_processor.clean_data(data_list[0])
         
         if cleaned_data.empty:
             logger.warning("清洗后无有效数据")
