@@ -10,7 +10,7 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>📈 股票数据分析平台</h1>
+            <h1>股票数据分析平台</h1>
             <nav class="nav">
                 <a href="/" class="nav-link active">数据查看</a>
                 <a href="/training" class="nav-link">模型训练</a>
@@ -21,131 +21,48 @@
         <div class="controls">
             <div class="control-group">
                 <label for="stockCode">股票/ETF代码</label>
-                <input type="text" id="stockCode" value="000001" placeholder="输入股票/ETF代码 (如: 000001, 399001, 600519, 510300)">
-                <small style="color: var(--text-tertiary); font-size: 12px; margin-top: 4px;">
-                    💡 推荐: 000001(上证指数), 399001(深证成指), 600519(贵州茅台), 510300(沪深300ETF)
-                </small>
+                <input type="text" id="stockCode" value="000001" placeholder="输入股票/ETF代码">
             </div>
             <div class="control-group">
                 <button id="fetchBtn" class="btn btn-primary">获取数据</button>
             </div>
         </div>
 
-        <div class="charts-container">
-            <div class="chart-card">
-                <h2>价格走势图</h2>
-                <canvas id="priceChart"></canvas>
+        <div class="charts-section">
+            <div class="section-header">
+                <h2>市场走势</h2>
             </div>
-            <div class="chart-card">
-                <h2>成交量</h2>
-                <canvas id="volumeChart"></canvas>
+            <div class="charts-grid">
+                <div class="chart-box">
+                    <h3>价格走势</h3>
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h3>成交量</h3>
+                    <canvas id="volumeChart"></canvas>
+                </div>
             </div>
         </div>
 
-        <div class="charts-container">
-            <div class="chart-card">
-                <h2>KDJ指标</h2>
+        <div class="indicators-grid">
+            <div class="indicator-box">
+                <h3>KDJ指标</h3>
                 <canvas id="kdjChart"></canvas>
             </div>
-            <div class="chart-card">
-                <h2>MACD指标</h2>
+            <div class="indicator-box">
+                <h3>MACD指标</h3>
                 <canvas id="macdChart"></canvas>
             </div>
         </div>
 
         <div class="signals-section">
-            <h2>交易信号</h2>
-            <div id="signalsContainer" class="signals-container">
+            <div class="section-header">
+                <h2>交易信号</h2>
+            </div>
+            <div id="signalsContainer" class="signals-grid">
                 <div class="empty-state">
                     <span class="empty-state-icon">📊</span>
-                    <p>还没有交易数据，<strong>点击"获取数据"按钮</strong>开始体验！</p>
-                    <p style="font-size: 13px; color: #64748b; margin-top: 10px;">
-                        💡 推荐: 000001(上证指数), 399001(深证成指), 600519(贵州茅台)
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 期权数据展示窗口 -->
-        <div class="options-section" id="optionsSection" style="display: none;">
-            <h2>🎯 期权数据 - 多空分析</h2>
-            
-            <!-- 期权摘要统计 -->
-            <div class="charts-container">
-                <div class="chart-card option-summary-card">
-                    <h3>📈 期权摘要</h3>
-                    <div id="optionSummary">
-                        <div class="empty-state">
-                            <span class="empty-state-icon">⏳</span>
-                            <p>点击下方按钮加载期权数据</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="chart-card">
-                    <h3>📊 多空对比</h3>
-                    <canvas id="optionRatioChart"></canvas>
-                </div>
-            </div>
-            
-            <!-- 期权链表格 -->
-            <div class="option-chain-container">
-                <div class="option-chain-controls">
-                    <div class="control-group">
-                        <label for="expireDateSelect">到期月份</label>
-                        <select id="expireDateSelect" class="form-select">
-                            <option value="">全部</option>
-                        </select>
-                    </div>
-                    <button id="loadOptionsBtn" class="btn btn-primary">加载期权数据</button>
-                    <button id="refreshOptionsBtn" class="btn btn-secondary" style="display: none;">
-                        🔄 刷新
-                    </button>
-                </div>
-                
-                <div class="option-chain-table-wrapper">
-                    <table class="option-chain-table" id="optionChainTable">
-                        <thead>
-                            <tr>
-                                <th colspan="9" class="option-header-call">📈 看涨期权 (Call)</th>
-                                <th class="option-header-strike">行权价</th>
-                                <th colspan="9" class="option-header-put">📉 看跌期权 (Put)</th>
-                            </tr>
-                            <tr>
-                                <!-- Call 列 -->
-                                <th>代码</th>
-                                <th>最新价</th>
-                                <th>涨跌幅</th>
-                                <th>买价</th>
-                                <th>买量</th>
-                                <th>卖价</th>
-                                <th>卖量</th>
-                                <th>成交量</th>
-                                <th>持仓量</th>
-                                <!-- 行权价 -->
-                                <th class="strike-col">Strike</th>
-                                <!-- Put 列 -->
-                                <th>持仓量</th>
-                                <th>成交量</th>
-                                <th>卖量</th>
-                                <th>卖价</th>
-                                <th>买量</th>
-                                <th>买价</th>
-                                <th>涨跌幅</th>
-                                <th>最新价</th>
-                                <th>代码</th>
-                            </tr>
-                        </thead>
-                        <tbody id="optionChainBody">
-                            <tr>
-                                <td colspan="19">
-                                    <div class="empty-state" style="padding: 40px;">
-                                        <span class="empty-state-icon">🎯</span>
-                                        <p>点击"加载期权数据"查看期权链</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <p>还没有交易数据，点击"获取数据"按钮开始体验</p>
                 </div>
             </div>
         </div>

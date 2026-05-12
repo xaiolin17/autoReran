@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>🤖 机器学习模型训练</h1>
+            <h1>机器学习模型训练</h1>
             <nav class="nav">
                 <a href="/" class="nav-link">数据查看</a>
                 <a href="/training" class="nav-link active">模型训练</a>
@@ -18,12 +18,12 @@
         </header>
 
         <div class="content-grid">
-            <div class="form-card">
+            <div class="form-box">
                 <h2>训练新模型</h2>
                 <form id="trainForm" class="form">
                     <div class="form-group">
                         <label for="trainStockCode">股票代码</label>
-                        <input type="text" id="trainStockCode" value="SAMPLE" placeholder="输入股票代码">
+                        <input type="text" id="trainStockCode" value="000001" placeholder="输入股票代码">
                     </div>
                     <div class="form-group">
                         <label for="modelName">模型名称</label>
@@ -39,8 +39,8 @@
                     <div class="form-group">
                         <label>训练模式</label>
                         <div class="radio-group">
-                            <label><input type="radio" name="trainingMode" value="regression" checked> 价格预测（回归）</label>
-                            <label><input type="radio" name="trainingMode" value="classification"> 涨跌判断（分类）</label>
+                            <label><input type="radio" name="trainingMode" value="regression" checked> 价格预测</label>
+                            <label><input type="radio" name="trainingMode" value="classification"> 涨跌判断</label>
                         </div>
                     </div>
                     <div class="form-group">
@@ -49,66 +49,17 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-large">开始训练</button>
                 </form>
-                <div id="trainingStatus" class="status-message" style="display: none;"></div>
             </div>
 
-            <div class="list-card">
+            <div class="list-box">
                 <h2>已训练模型</h2>
                 <div id="modelsList" class="models-list">
                     <div class="empty-state">
                         <span class="empty-state-icon">🤖</span>
-                        <p>还没有训练模型，<strong>先在左侧填写信息开始训练</strong>！</p>
-                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">💡 提示：先确保已有股票数据存在</p>
+                        <p>还没有训练模型，先在左侧填写信息开始训练</p>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="prediction-section">
-            <h2>🔮 AI 信号预测</h2>
-            <div class="prediction-controls">
-                <div class="control-group">
-                    <label for="predictModel">选择模型</label>
-                    <select id="predictModel">
-                        <option value="">-- 请选择模型 --</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label for="predictStock">股票代码</label>
-                    <input type="text" id="predictStock" value="SAMPLE">
-                </div>
-                <button id="predictBtn" class="btn btn-primary">价格预测</button>
-                <button id="predictSignalBtn" class="btn btn-success">信号预测</button>
-            </div>
-            <div id="predictionResult" class="prediction-result" style="display: none;"></div>
-        </div>
-
-        <div class="prediction-section">
-            <h2>🧩 多模型综合预测</h2>
-            <div class="prediction-controls">
-                <div class="control-group">
-                    <label>选择模型（可多选）</label>
-                    <div id="ensembleModelsList" class="checkbox-group">
-                        <div class="empty-state" style="padding: 30px 20px;">
-                            <span class="empty-state-icon" style="font-size: 36px;">📊</span>
-                            <p style="font-size: 14px;">请先训练至少1个模型才能进行综合预测</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <label for="ensembleStock">股票代码</label>
-                    <input type="text" id="ensembleStock" value="SAMPLE">
-                </div>
-                <div class="control-group">
-                    <label>综合方法</label>
-                    <div class="radio-group">
-                        <label><input type="radio" name="ensembleMethod" value="voting" checked> 投票制</label>
-                        <label><input type="radio" name="ensembleMethod" value="weighted"> 加权制</label>
-                    </div>
-                </div>
-                <button id="ensemblePredictBtn" class="btn btn-warning btn-large">开始综合预测</button>
-            </div>
-            <div id="ensembleResult" class="prediction-result" style="display: none;"></div>
         </div>
     </div>
 

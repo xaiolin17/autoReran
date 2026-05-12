@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>📊 策略回测</h1>
+            <h1>策略回测</h1>
             <nav class="nav">
                 <a href="/" class="nav-link">数据查看</a>
                 <a href="/training" class="nav-link">模型训练</a>
@@ -18,12 +18,12 @@
         </header>
 
         <div class="content-grid">
-            <div class="form-card">
+            <div class="form-box">
                 <h2>回测配置</h2>
                 <form id="backtestForm" class="form">
                     <div class="form-group">
                         <label for="backtestStockCode">股票代码</label>
-                        <input type="text" id="backtestStockCode" value="SAMPLE" placeholder="输入股票代码">
+                        <input type="text" id="backtestStockCode" value="000001" placeholder="输入股票代码">
                     </div>
                     <div class="form-group">
                         <label for="strategyName">策略名称</label>
@@ -48,24 +48,22 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-large">运行回测</button>
                 </form>
-                <div id="backtestStatus" class="status-message" style="display: none;"></div>
             </div>
 
-            <div class="list-card">
+            <div class="list-box">
                 <h2>回测结果</h2>
                 <div id="backtestsList" class="models-list">
                     <div class="empty-state">
                         <span class="empty-state-icon">📈</span>
-                        <p>还没有回测结果，<strong>先在左侧配置并运行回测</strong>！</p>
-                        <p style="font-size: 13px; color: #64748b; margin-top: 8px;">💡 提示：确保已有该股票的历史数据</p>
+                        <p>还没有回测结果，先在左侧配置并运行回测</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div id="backtestResultDetail" class="result-detail" style="display: none;">
+        <div id="backtestResultDetail" class="results-section" style="display: none;">
             <h2>回测详情</h2>
-            <div class="stats-cards">
+            <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">总收益率</div>
                     <div class="stat-value" id="totalReturn">-</div>
@@ -89,15 +87,6 @@
                 <div class="stat-card">
                     <div class="stat-label">最终资金</div>
                     <div class="stat-value" id="finalCapital">-</div>
-                </div>
-            </div>
-        </div>
-        <div class="trade-log-section">
-            <h3>交易记录</h3>
-            <div id="tradeLog" class="trade-log">
-                <div class="empty-state" style="padding: 40px 20px;">
-                    <span class="empty-state-icon" style="font-size: 36px;">📝</span>
-                    <p style="font-size: 14px;">暂无交易记录，运行回测后这里会显示交易详情</p>
                 </div>
             </div>
         </div>
