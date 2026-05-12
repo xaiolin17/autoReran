@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARN 数据获取系统架构</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        .subtitle {
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .architecture-diagram {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .section {
+            margin-bottom: 50px;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        .box {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px 30px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 2px solid #ddd;
+        }
+        .box.api { border-color: #4CAF50; background: linear-gradient(135deg, #e8f5e9 0%, #a5d6a7 100%); }
+        .box.db { border-color: #2196F3; background: linear-gradient(135deg, #e3f2fd 0%, #90caf9 100%); }
+        .box.service { border-color: #FF9800; background: linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%); }
+        .box.frontend { border-color: #9C27B0; background: linear-gradient(135deg, #f3e5f5 0%, #ce93d8 100%); }
+        .arrow {
+            font-size: 2rem;
+            color: #667eea;
+        }
+        .horizontal-flow {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .requirements-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .req-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 24px;
+            border-left: 4px solid #667eea;
+        }
+        .req-number {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+        .req-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+        .req-desc {
+            color: #666;
+            line-height: 1.6;
+        }
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .tech-tag {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ARN 数据获取系统</h1>
+        <p class="subtitle">基于 AkShare 的专业股票数据处理架构</p>
+        
+        <div class="architecture-diagram">
+            <div class="section">
+                <h2 class="section-title">📋 需求要点</h2>
+                <div class="requirements-grid">
+                    <div class="req-card">
+                        <span class="req-number">1</span>
+                        <div class="req-title">真实数据源</div>
+                        <div class="req-desc">只使用 AkShare 真实数据，彻底移除模拟数据。默认展示上证指数（000001）</div>
+                    </div>
+                    <div class="req-card">
+                        <span class="req-number">2</span>
+                        <div class="req-title">数据持久化</div>
+                        <div class="req-desc">获取的数据保存到数据库，避免重复下载</div>
+                    </div>
+                    <div class="req-card">
+                        <span class="req-number">3</span>
+                        <div class="req-title">智能加载</div>
+                        <div class="req-desc">有数据直接展示，无数据异步下载，WebSocket 推送进度</div>
+                    </div>
+                    <div class="req-card">
+                        <span class="req-number">4</span>
+                        <div class="req-title">增量更新</div>
+                        <div class="req-desc">用户可刷新数据，只获取最新数据而非全量下载</div>
+                    </div>
+                    <div class="req-card">
+                        <span class="req-number">5</span>
+                        <div class="req-title">技术指标</div>
+                        <div class="req-desc">混合模式：优先读取已计算的，缺失的实时计算，可后台补全</div>
+                    </div>
+                    <div class="req-card">
+                        <span class="req-number">6</span>
+                        <div class="req-title">单一数据源</div>
+                        <div class="req-desc">重构 AkshareCrawler 成为唯一可靠的数据源</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">🔄 数据获取流程</h2>
+                <div class="flow-diagram">
+                    <div class="box frontend">用户请求数据</div>
+                    <div class="arrow">↓</div>
+                    <div class="box service">检查数据库</div>
+                    <div class="arrow">↓</div>
+                    <div class="horizontal-flow">
+                        <div>
+                            <div class="box db">有数据 → 直接返回<br>（快速响应）</div>
+                        </div>
+                        <div class="arrow">或</div>
+                        <div>
+                            <div class="box api">无数据 → 后台下载<br>（WebSocket 推进度）</div>
+                        </div>
+                    </div>
+                    <div class="arrow">↓</div>
+                    <div class="box service">从 AkShare 获取数据</div>
+                    <div class="arrow">↓</div>
+                    <div class="box service">计算技术指标</div>
+                    <div class="arrow">↓</div>
+                    <div class="box db">保存到数据库</div>
+                    <div class="arrow">↓</div>
+                    <div class="box frontend">通知用户刷新</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">🛠 技术栈</h2>
+                <div class="tech-stack">
+                    <span class="tech-tag">FastAPI</span>
+                    <span class="tech-tag">SQLAlchemy</span>
+                    <span class="tech-tag">SQLite</span>
+                    <span class="tech-tag">AkShare</span>
+                    <span class="tech-tag">Pandas</span>
+                    <span class="tech-tag">WebSocket</span>
+                    <span class="tech-tag">ECharts</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">📊 数据库表结构</h2>
+                <div class="req-card" style="border-left-color: #2196F3;">
+                    <div class="req-title">StockData 表</div>
+                    <div class="req-desc">
+                        <strong>基础数据：</strong>open, high, low, close, volume, amount<br>
+                        <strong>MA 均线：</strong>ma5, ma10, ma20, ma30, ma60<br>
+                        <strong>MACD：</strong>dif, dea, macd<br>
+                        <strong>KDJ：</strong>k, d, j<br>
+                        <strong>RSI：</strong>rsi6, rsi12, rsi24<br>
+                        <strong>布林带：</strong>upper, middle, lower
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
