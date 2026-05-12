@@ -9,7 +9,7 @@ try:
     AKSHARE_AVAILABLE = True
 except ImportError:
     AKSHARE_AVAILABLE = False
-    logger.warning("Akshare not installed, will use other data sources")
+    logger.warning("Akshare not installed, please install Akshare: pip install akshare")
 
 
 class AkshareCrawler(BaseCrawler):
@@ -22,24 +22,19 @@ class AkshareCrawler(BaseCrawler):
                         start_date: Optional[str] = None, 
                         end_date: Optional[str] = None) -> pd.DataFrame:
         if not self.available:
-            logger.warning("Akshare not available")
+            logger.warning("Akshare 不可用，请安装 Akshare: pip install akshare")
             return pd.DataFrame()
         
         try:
-            # 处理指数
+            # 处理指数代码转换
             if stock_code == "000001":
-                df = self._fetch_index_data("sh000001", period, start_date, end_date)
+                return self._fetch_index_data("sh000001", period, start_date, end_date)
             elif stock_code == "399001":
-                df = self._fetch_index_data("sz399001", period, start_date, end_date)
+                return self._fetch_index_data("sz399001", period, start_date, end_date)
             else:
-                df = self._fetch_stock_data(stock_code, period, start_date, end_date)
-            
-            if not df.empty:
-                logger.info(f"✅ Akshare获取 {stock_code} {period} 数据: {len(df)} 条")
-            
-            return df
+                return self._fetch_stock_data(stock_code, period, start_date, end_date)
         except Exception as e:
-            logger.error(f"Akshare获取 {stock_code} 数据失败: {e}")
+            logger.error(f"Akshare获取 {stock_code} 数据失败: {str(e)}")
             return pd.DataFrame()
     
     def fetch_realtime_data(self, stock_code: str) -> Dict:
@@ -70,21 +65,25 @@ class AkshareCrawler(BaseCrawler):
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
             
-            # 获取指数历史数据
+            # 提取纯数字代码，去除 sh/sz 前缀
+            code = index_code[2:] if len(index_code) > 2 else index_code
+            
+            # 根据周期选择不同的 API
             if period == "1d":
-                df = ak.index_zh_a_hist(symbol=index_code[2:], period="daily", 
+                df = ak.index_zh_a_hist(symbol=code, period="daily", 
                                        start_date=start_date, end_date=end_date)
             elif period == "1w":
-                df = ak.index_zh_a_hist(symbol=index_code[2:], period="weekly", 
+                df = ak.index_zh_a_hist(symbol=code, period="weekly", 
                                        start_date=start_date, end_date=end_date)
             elif period == "1M":
-                df = ak.index_zh_a_hist(symbol=index_code[2:], period="monthly", 
+                df = ak.index_zh_a_hist(symbol=code, period="monthly", 
                                        start_date=start_date, end_date=end_date)
             else:
                 df = ak.index_zh_a_hist_min_em(symbol=index_code, period="60", 
                                               start_date=start_date, end_date=end_date)
             
             if df is None or df.empty:
+                logger.warning(f"AkShare 返回空数据: index={index_code}, period={period}")
                 return pd.DataFrame()
             
             # 标准化列名
@@ -104,9 +103,11 @@ class AkshareCrawler(BaseCrawler):
                     'source': 'akshare'
                 })
             
-            return pd.DataFrame(result)
+            df_result = pd.DataFrame(result)
+            logger.info(f"✅ Akshare 获取指数数据成功: {index_code}, {len(df_result)} 条")
+            return df_result
         except Exception as e:
-            logger.error(f"获取指数 {index_code} 数据失败: {e}")
+            logger.error(f"获取指数 {index_code} 数据失败: {str(e)}")
             return pd.DataFrame()
     
     def _fetch_stock_data(self, stock_code: str, period: str, 
@@ -118,12 +119,13 @@ class AkshareCrawler(BaseCrawler):
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
             
-            # 确定市场
+            # 确定市场并添加前缀
             if stock_code.startswith(('600', '601', '603', '605', '688')):
                 symbol = f"sh{stock_code}"
             else:
                 symbol = f"sz{stock_code}"
             
+            # 根据周期选择不同的 API
             if period == "1d":
                 df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", 
                                        start_date=start_date, end_date=end_date)
@@ -138,10 +140,12 @@ class AkshareCrawler(BaseCrawler):
                                               start_date=start_date, end_date=end_date)
             
             if df is None or df.empty:
+                logger.warning(f"AkShare 返回空数据: stock={stock_code}, period={period}")
                 return pd.DataFrame()
             
             stock_name = df.iloc[0].get('股票名称', stock_code) if len(df) > 0 else stock_code
             
+            # 标准化列名
             result = []
             for _, row in df.iterrows():
                 result.append({
@@ -158,7 +162,9 @@ class AkshareCrawler(BaseCrawler):
                     'source': 'akshare'
                 })
             
-            return pd.DataFrame(result)
+            df_result = pd.DataFrame(result)
+            logger.info(f"✅ Akshare 获取股票数据成功: {stock_code}, {len(df_result)} 条")
+            return df_result
         except Exception as e:
-            logger.error(f"获取股票 {stock_code} 数据失败: {e}")
+            logger.error(f"获取股票 {stock_code} 数据失败: {str(e)}")
             return pd.DataFrame()
