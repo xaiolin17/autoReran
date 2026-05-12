@@ -1,19 +1,84 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 import pandas as pd
-from app.services.stock_service import StockService
 from app.utils.technical_indicators import TechnicalIndicators
-from app.core.logger import logger
-from app.core.config import settings
-from app.core.cache import get_cache, make_cache_key
 
 
 class IndicatorService:
     def __init__(self, db: Session):
         self.db = db
-        self.stock_service = StockService(db)
-        self.cache_enabled = settings.CACHE_ENABLED
-        self.cache_ttl = settings.CACHE_INDICATOR_TTL
+    
+    def calculate_and_save_indicators(self, stock_code: str, period: str = "1d") -> None:
+        """计算并保存技术指标到数据库"""
+        from app.models.stock_data import StockData
+        from sqlalchemy import desc
+        
+        query = self.db.query(StockData).filter(
+            StockData.stock_code == stock_code,
+            StockData.period == period
+        ).order_by(StockData.datetime)
+        
+        stock_data_list = query.all()
+        
+        if not stock_data_list:
+            return
+        
+        data = []
+        for stock in stock_data_list:
+            data.append({
+                'datetime': stock.datetime,
+                'open_price': stock.open_price,
+                'high_price': stock.high_price,
+                'low_price': stock.low_price,
+                'close_price': stock.close_price,
+                'volume': stock.volume,
+                'amount': stock.amount,
+            })
+        
+        df = pd.DataFrame(data)
+        df = df.sort_values('datetime').reset_index(drop=True)
+        df = TechnicalIndicators.calculate_all_indicators(df)
+        
+        for i, stock in enumerate(stock_data_list):
+            if i >= len(df):
+                break
+            
+            row = df.iloc[i]
+            
+            if 'ma5' in row:
+                stock.ma5 = float(row['ma5']) if pd.notna(row['ma5']) else None
+            if 'ma10' in row:
+                stock.ma10 = float(row['ma10']) if pd.notna(row['ma10']) else None
+            if 'ma20' in row:
+                stock.ma20 = float(row['ma20']) if pd.notna(row['ma20']) else None
+            if 'ma60' in row:
+                stock.ma60 = float(row['ma60']) if pd.notna(row['ma60']) else None
+            
+            if 'kdj_k' in row:
+                stock.k = float(row['kdj_k']) if pd.notna(row['kdj_k']) else None
+            if 'kdj_d' in row:
+                stock.d = float(row['kdj_d']) if pd.notna(row['kdj_d']) else None
+            if 'kdj_j' in row:
+                stock.j = float(row['kdj_j']) if pd.notna(row['kdj_j']) else None
+            
+            if 'macd' in row:
+                stock.macd = float(row['macd']) if pd.notna(row['macd']) else None
+            if 'macd_signal' in row:
+                stock.dea = float(row['macd_signal']) if pd.notna(row['macd_signal']) else None
+            if 'macd_histogram' in row:
+                stock.dif = float(row['macd_histogram']) if pd.notna(row['macd_histogram']) else None
+            
+            if 'rsi' in row:
+                stock.rsi6 = float(row['rsi']) if pd.notna(row['rsi']) else None
+            
+            if 'bb_upper' in row:
+                stock.upper = float(row['bb_upper']) if pd.notna(row['bb_upper']) else None
+            if 'bb_middle' in row:
+                stock.middle = float(row['bb_middle']) if pd.notna(row['bb_middle']) else None
+            if 'bb_lower' in row:
+                stock.lower = float(row['bb_lower']) if pd.notna(row['bb_lower']) else None
+        
+        self.db.commit()
     
     def get_stock_data_with_indicators(
         self,
@@ -23,56 +88,61 @@ class IndicatorService:
         end_date: Optional[str] = None,
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        if self.cache_enabled:
-            cache = get_cache()
-            key = f"indicator:get_stock_data_with_indicators:{make_cache_key(stock_code, period, str(start_date), str(end_date), limit)}"
-            cached = cache.get(key)
-            if cached is not None:
-                logger.debug(f"缓存命中: get_stock_data_with_indicators {stock_code}")
-                return cached
+        from app.models.stock_data import StockData
+        from sqlalchemy import desc
         
-        logger.debug(f"获取带指标的股票数据: {stock_code}")
+        # 确保指标已计算并保存
+        self.calculate_and_save_indicators(stock_code, period)
         
-        stock_data = self.stock_service.get_stock_data(
-            stock_code, period, start_date, end_date, limit
+        query = self.db.query(StockData).filter(
+            StockData.stock_code == stock_code,
+            StockData.period == period
         )
         
-        if not stock_data:
-            logger.warning(f"无股票数据: {stock_code}")
+        query = query.order_by(desc(StockData.datetime))
+        
+        if limit:
+            query = query.limit(limit)
+        
+        stock_data_list = query.all()
+        
+        if not stock_data_list:
             return []
         
-        df = self.stock_service.to_dataframe(stock_data)
-        df = TechnicalIndicators.calculate_all_indicators(df)
-        
         result = []
-        for _, row in df.iterrows():
+        for stock in stock_data_list:
             item = {
-                'datetime': row['datetime'].isoformat() if hasattr(row['datetime'], 'isoformat') else str(row['datetime']),
-                'open_price': float(row['open_price']),
-                'high_price': float(row['high_price']),
-                'low_price': float(row['low_price']),
-                'close_price': float(row['close_price']),
-                'volume': float(row['volume']),
-                'amount': float(row['amount']) if pd.notna(row['amount']) else None
+                'datetime': stock.datetime.isoformat() if hasattr(stock.datetime, 'isoformat') else str(stock.datetime),
+                'open_price': float(stock.open_price) if stock.open_price else None,
+                'high_price': float(stock.high_price) if stock.high_price else None,
+                'low_price': float(stock.low_price) if stock.low_price else None,
+                'close_price': float(stock.close_price) if stock.close_price else None,
+                'volume': float(stock.volume) if stock.volume else None,
+                'amount': float(stock.amount) if stock.amount else None,
+                'ma5': float(stock.ma5) if stock.ma5 else None,
+                'ma10': float(stock.ma10) if stock.ma10 else None,
+                'ma20': float(stock.ma20) if stock.ma20 else None,
+                'ma60': float(stock.ma60) if stock.ma60 else None,
+                'kdj_k': float(stock.k) if stock.k else None,
+                'kdj_d': float(stock.d) if stock.d else None,
+                'kdj_j': float(stock.j) if stock.j else None,
+                'macd': float(stock.macd) if stock.macd else None,
+                'macd_signal': float(stock.dea) if stock.dea else None,
+                'macd_histogram': float(stock.dif) if stock.dif else None,
+                'rsi': float(stock.rsi6) if stock.rsi6 else None,
+                'bb_upper': float(stock.upper) if stock.upper else None,
+                'bb_middle': float(stock.middle) if stock.middle else None,
+                'bb_lower': float(stock.lower) if stock.lower else None
             }
-            
-            for col in ['kdj_k', 'kdj_d', 'kdj_j', 'macd', 'macd_signal', 'macd_histogram', 'rsi', 'bb_middle', 'bb_upper', 'bb_lower']:
-                if col in row:
-                    item[col] = float(row[col]) if pd.notna(row[col]) else None
-            
-            for col in ['ma5', 'ma10', 'ma20', 'ma60']:
-                if col in row:
-                    item[col] = float(row[col]) if pd.notna(row[col]) else None
             
             result.append(item)
         
-        logger.debug(f"返回带指标数据: {len(result)}条")
-        
-        if self.cache_enabled:
-            cache = get_cache()
-            cache.set(key, result, self.cache_ttl)
-        
         return result
+    
+    @staticmethod
+    def calculate_indicators_for_df_static(df: pd.DataFrame) -> pd.DataFrame:
+        """静态方法：计算数据框的技术指标"""
+        return TechnicalIndicators.calculate_all_indicators(df)
     
     def calculate_indicators_for_df(self, df: pd.DataFrame) -> pd.DataFrame:
         return TechnicalIndicators.calculate_all_indicators(df)
@@ -89,22 +159,23 @@ class IndicatorService:
             curr_d = df.iloc[i]['kdj_d']
             curr_j = df.iloc[i]['kdj_j']
             
-            if prev_k <= prev_d and curr_k > curr_d and curr_k < 20:
-                signals.append({
-                    'datetime': df.iloc[i]['datetime'],
-                    'type': 'buy',
-                    'indicator': 'KDJ',
-                    'reason': 'K线上穿D线，超卖区域金叉',
-                    'price': df.iloc[i]['close_price']
-                })
-            elif prev_k >= prev_d and curr_k < curr_d and curr_k > 80:
-                signals.append({
-                    'datetime': df.iloc[i]['datetime'],
-                    'type': 'sell',
-                    'indicator': 'KDJ',
-                    'reason': 'K线下穿D线，超买区域死叉',
-                    'price': df.iloc[i]['close_price']
-                })
+            if pd.notna(prev_k) and pd.notna(prev_d) and pd.notna(curr_k) and pd.notna(curr_d):
+                if prev_k <= prev_d and curr_k > curr_d and curr_k < 20:
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
+                        'type': 'buy',
+                        'indicator': 'KDJ',
+                        'reason': 'K线上穿D线，超卖区域金叉',
+                        'price': float(df.iloc[i]['close_price'])
+                    })
+                elif prev_k >= prev_d and curr_k < curr_d and curr_k > 80:
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
+                        'type': 'sell',
+                        'indicator': 'KDJ',
+                        'reason': 'K线下穿D线，超买区域死叉',
+                        'price': float(df.iloc[i]['close_price'])
+                    })
         
         return signals
     
@@ -119,30 +190,27 @@ class IndicatorService:
             curr_macd = df.iloc[i]['macd']
             curr_signal = df.iloc[i]['macd_signal']
             
-            if prev_macd <= prev_signal and curr_macd > curr_signal:
-                signals.append({
-                    'datetime': df.iloc[i]['datetime'],
-                    'type': 'buy',
-                    'indicator': 'MACD',
-                    'reason': 'MACD上穿信号线，金叉',
-                    'price': df.iloc[i]['close_price']
-                })
-            elif prev_macd >= prev_signal and curr_macd < curr_signal:
-                signals.append({
-                    'datetime': df.iloc[i]['datetime'],
-                    'type': 'sell',
-                    'indicator': 'MACD',
-                    'reason': 'MACD下穿信号线，死叉',
-                    'price': df.iloc[i]['close_price']
-                })
+            if pd.notna(prev_macd) and pd.notna(prev_signal) and pd.notna(curr_macd) and pd.notna(curr_signal):
+                if prev_macd <= prev_signal and curr_macd > curr_signal:
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
+                        'type': 'buy',
+                        'indicator': 'MACD',
+                        'reason': 'MACD上穿信号线，金叉',
+                        'price': float(df.iloc[i]['close_price'])
+                    })
+                elif prev_macd >= prev_signal and curr_macd < curr_signal:
+                    signals.append({
+                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
+                        'type': 'sell',
+                        'indicator': 'MACD',
+                        'reason': 'MACD下穿信号线，死叉',
+                        'price': float(df.iloc[i]['close_price'])
+                    })
         
         return signals
     
     def get_all_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         kdj_signals = self.get_kdj_signals(df)
         macd_signals = self.get_macd_signals(df)
-        
-        all_signals = kdj_signals + macd_signals
-        all_signals.sort(key=lambda x: x['datetime'])
-        
-        return all_signals
+        return kdj_signals + macd_signals

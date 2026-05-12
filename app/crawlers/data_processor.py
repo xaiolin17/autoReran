@@ -107,5 +107,5 @@ class DataProcessor:
     
     @staticmethod
     def generate_sample_data(stock_code: str, period: str = "1d", 
-                            days: int = 365, base_price: float = None) -> pd.DataFrame:
+                            days: int = 365, base_price: float = 100.0) -> pd.DataFrame:
         raise RuntimeError(f"不允许生成模拟数据！请安装akshare并配置真实数据源！股票代码: {stock_code}")

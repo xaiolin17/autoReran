@@ -61,9 +61,9 @@ class AkshareCrawler(BaseCrawler):
             elif period == "1M":
                 df = ak.index_zh_a_hist(symbol=index_code[2:], period="monthly", 
                                        start_date=start_date, end_date=end_date)
-            else:  # 1h
+            else:
                 df = ak.index_zh_a_hist_min_em(symbol=index_code, period="60", 
-                                             start_date=start_date, end_date=end_date)
+                                              start_date=start_date, end_date=end_date)
             
             if df is None or df.empty:
                 return pd.DataFrame()
@@ -116,7 +116,7 @@ class AkshareCrawler(BaseCrawler):
                                        start_date=start_date, end_date=end_date)
             else:
                 df = ak.stock_zh_a_hist_min_em(symbol=symbol, period="60", 
-                                             start_date=start_date, end_date=end_date)
+                                              start_date=start_date, end_date=end_date)
             
             if df is None or df.empty:
                 return pd.DataFrame()

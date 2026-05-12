@@ -1,4 +1,10 @@
-import orjson
+try:
+    import orjson
+    HAS_ORJSON = True
+except ImportError:
+    import json
+    HAS_ORJSON = False
+
 import msgpack
 from datetime import datetime, date
 from decimal import Decimal
@@ -17,13 +23,21 @@ def default(obj: Any) -> Any:
 
 
 def json_dumps(data: Any) -> bytes:
-    return orjson.dumps(data, default=default)
+    if HAS_ORJSON:
+        return orjson.dumps(data, default=default)
+    else:
+        return json.dumps(data, default=default, ensure_ascii=False).encode("utf-8")
 
 
 def json_loads(data: bytes | str) -> Any:
-    if isinstance(data, str):
-        data = data.encode("utf-8")
-    return orjson.loads(data)
+    if HAS_ORJSON:
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        return orjson.loads(data)
+    else:
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        return json.loads(data)
 
 
 def msgpack_dumps(data: Any) -> bytes:
@@ -38,4 +52,7 @@ class ORJSONResponse(Response):
     media_type = "application/json"
 
     def render(self, content: Any) -> bytes:
-        return orjson.dumps(content, default=default)
+        if HAS_ORJSON:
+            return orjson.dumps(content, default=default)
+        else:
+            return json.dumps(content, default=default, ensure_ascii=False).encode("utf-8")
