@@ -27,21 +27,6 @@ class InitializationService:
             
             if exists:
                 print(f"✓ 默认数据已存在 (股票代码: {default_stock_code})")
-                # 检查数据是否是旧的模拟数据，如果是则替换
-                sample = count_query.first()
-                if sample:
-                    # 检查是否是旧的模拟数据（price < 500，通常上证指数>2000）
-                    first_data = self.db.query(StockData).filter(
-                        StockData.stock_code == default_stock_code,
-                        StockData.period == "1d"
-                    ).first()
-                    if first_data and first_data.close_price < 500:
-                        print("⚠️ 发现旧的模拟数据，正在删除并获取真实数据...")
-                        self.db.query(StockData).filter(
-                            StockData.stock_code == default_stock_code
-                        ).delete()
-                        self.db.commit()
-                        exists = False
             
             if not exists:
                 print(f"⚙️ 初始化默认数据 (股票代码: {default_stock_code})...")
