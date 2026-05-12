@@ -64,15 +64,35 @@ def get_available_stocks(db: Session = Depends(get_db)):
 def refresh_stock_data(
     stock_code: str,
     period: str = "1d",
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
+    # First check if we have existing data
     service = StockService(db)
     latest_date = service.get_latest_date(stock_code, period)
     message = f"发现现有数据，从 {latest_date.date()} 开始增量更新" if latest_date else f"没有现有数据，将下载完整数据"
     
-    async def background_refresh():
+    # Add sync background task
+    background_tasks.add_task(run_refresh_task, stock_code, period)
+    
+    return {
+        "message": message,
+        "stock_code": stock_code,
+        "period": period,
+        "incremental": latest_date is not None
+    }
+
+
+def run_refresh_task(stock_code: str, period: str = "1d"):
+    import asyncio
+    from app.core.database import SessionLocal
+    
+    async def async_refresh():
+        db = SessionLocal()
         try:
+            service = StockService(db)
+            indicator_service = IndicatorService(db)
+            
             await manager.broadcast({
                 "type": "download_progress",
                 "data": {
@@ -96,7 +116,6 @@ def refresh_stock_data(
                     }
                 }, channel="realtime")
                 
-                indicator_service = IndicatorService(db)
                 indicator_service.calculate_and_save_indicators(stock_code, period)
                 
                 await manager.broadcast({
@@ -131,15 +150,13 @@ def refresh_stock_data(
                     "message": f"刷新失败: {str(e)}"
                 }
             }, channel="realtime")
+        finally:
+            db.close()
     
-    if background_tasks:
-        import asyncio
-        loop = asyncio.get_event_loop()
-        loop.create_task(background_refresh())
-    
-    return {
-        "message": message,
-        "stock_code": stock_code,
-        "period": period,
-        "incremental": latest_date is not None
-    }
+    # Run async task in a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(async_refresh())
+    finally:
+        loop.close()
