@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
+from app.core.websocket_manager import manager as ws_manager
 from app.api.v1 import api_router
 from app.services.initialization_service import InitializationService
 
@@ -101,3 +102,37 @@ async def backtest():
 async def health_check():
     """健康检查端点"""
     return {"status": "ok", "message": "AReran 运行正常"}
+
+
+# ===== WebSocket 实时通知端点 =====
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await ws_manager.connect(websocket, channel="realtime")
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            # 处理客户端消息
+            if data.get("type") == "ping":
+                await ws_manager.send_personal_message(
+                    {"type": "pong", "timestamp": data.get("timestamp")},
+                    websocket
+                )
+            elif data.get("type") == "subscribe":
+                channel = data.get("channel", "realtime")
+                await ws_manager.send_personal_message(
+                    {"type": "subscribed", "channel": channel},
+                    websocket
+                )
+            elif data.get("type") == "refresh":
+                # 广播数据刷新通知
+                await ws_manager.broadcast(
+                    {"type": "refresh_needed", "reason": "manual_refresh", "sender": client_id},
+                    channel="realtime"
+                )
+
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, channel="realtime")
+    except Exception as e:
+        ws_manager.disconnect(websocket, channel="realtime")
