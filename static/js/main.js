@@ -24,7 +24,12 @@ function setupEventListeners() {
     const debouncedLoadOptions = debounce(loadOptionData, 400);
     
     fetchBtn.addEventListener('click', debouncedLoadData);
-    generateBtn.addEventListener('click', debounce(generateSampleData, 300));
+    if (generateBtn) {
+        generateBtn.addEventListener('click', debounce(() => {
+            // 现在直接使用真实数据，不再生成样本数据
+            showMessage('现在使用真实数据源，请点击"加载数据"获取！', 'info');
+        }, 300));
+    }
     loadOptionsBtn.addEventListener('click', debouncedLoadOptions);
     refreshOptionsBtn.addEventListener('click', debouncedLoadOptions);
     expireDateSelect.addEventListener('change', debounce(filterOptionData, 200));
@@ -223,19 +228,34 @@ async function loadData() {
     showLoading(true);
     
     try {
-        const data = await safeFetch(`/api/v1/indicators/${stockCode}`);
+        // 首先尝试获取数据
+        let data = await safeFetch(`/api/v1/indicators/${stockCode}`);
+        
+        // 如果没有数据，尝试调用 fetch_and_save 来获取真实数据
+        if (!data || data.length === 0) {
+            showMessage('正在从真实数据源获取数据，请稍候...', 'info');
+            // 调用获取并保存数据的接口
+            await safeFetch(`/api/v1/stocks/fetch/${stockCode}`, { 
+                method: 'POST',
+                skipCache: true 
+            });
+            // 再次获取数据
+            data = await safeFetch(`/api/v1/indicators/${stockCode}`, { skipCache: true });
+        }
         
         if (data && data.length > 0) {
             updateCharts(data);
             loadSignals(stockCode);
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
         } else {
-            showMessage('暂无数据，请先生成示例数据', 'warning');
+            showMessage('暂无数据，请尝试其他股票代码或稍后重试', 'warning');
             document.getElementById('signalsContainer').innerHTML = `
                 <div class="empty-state">
                     <span class="empty-state-icon">📊</span>
-                    <p>该股票暂无数据，<strong>先生成示例数据</strong>开始体验！</p>
-                    <span class="empty-state-action" onclick="generateSampleData()">立即生成示例数据</span>
+                    <p>该股票暂无数据，请尝试其他代码！</p>
+                    <p style="font-size: 13px; color: #64748b; margin-top: 10px;">
+                        💡 提示：尝试 000001(上证指数), 399001(深证成指), 600519(贵州茅台) 等
+                    </p>
                 </div>
             `;
         }
