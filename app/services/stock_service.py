@@ -6,8 +6,6 @@ import pandas as pd
 from app.core.logger import logger
 from app.models.stock_data import StockData
 from app.schemas.stock import StockDataCreate
-from app.crawlers.sina import SinaCrawler
-from app.crawlers.eastmoney import EastMoneyCrawler
 from app.crawlers.akshare_crawler import AkshareCrawler
 from app.crawlers.data_processor import DataProcessor
 
@@ -15,10 +13,8 @@ from app.crawlers.data_processor import DataProcessor
 class StockService:
     def __init__(self, db: Session):
         self.db = db
-        self.sina_crawler = SinaCrawler()
-        self.eastmoney_crawler = EastMoneyCrawler()
-        self.akshare_crawler = AkshareCrawler()
         self.data_processor = DataProcessor()
+        self.crawler = AkshareCrawler()
     
     def get_stock_data(
         self,
@@ -52,72 +48,97 @@ class StockService:
         self.db.refresh(db_stock)
         return db_stock
     
-    def fetch_and_save_stock_data(self, stock_code: str, period: str = "1d", start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[StockData]:
-        # 按优先级依次尝试数据源：Akshare > 东方财富 > 新浪 > 模拟数据
-        data_list = []
-        using_demo_data = False
+    def has_data(self, stock_code: str, period: str) -> bool:
+        count = self.db.query(StockData).filter(
+            StockData.stock_code == stock_code,
+            StockData.period == period
+        ).count()
+        return count > 0
+    
+    def get_latest_date(self, stock_code: str, period: str) -> Optional[datetime]:
+        latest = self.db.query(StockData).filter(
+            StockData.stock_code == stock_code,
+            StockData.period == period
+        ).order_by(desc(StockData.datetime)).first()
+        return latest.datetime if latest else None
+    
+    def fetch_and_save_stock_data(
+        self,
+        stock_code: str,
+        period: str = "1d",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        incremental: bool = False
+    ) -> List[StockData]:
+        if incremental:
+            latest_date = self.get_latest_date(stock_code, period)
+            if latest_date:
+                start_date = (latest_date + timedelta(days=1)).strftime("%Y%m%d")
+                logger.info(f"增量更新: 从 {start_date} 开始获取 {stock_code} {period} 数据")
+        
+        df = self.crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+        
+        if df.empty:
+            logger.warning(f"未能从 Akshare 获取到数据: {stock_code} {period}")
+            return []
+        
+        cleaned_data = self.data_processor.clean_data(df)
+        
+        saved_stocks = []
+        for _, row in cleaned_data.iterrows():
+            existing = self.db.query(StockData).filter(
+                StockData.stock_code == row['stock_code'],
+                StockData.period == row['period'],
+                StockData.datetime == row['datetime']
+            ).first()
+            
+            if not existing:
+                stock_data = StockData(
+                    stock_code=row['stock_code'],
+                    stock_name=row.get('stock_name'),
+                    period=row['period'],
+                    datetime=row['datetime'],
+                    open_price=row['open_price'],
+                    high_price=row['high_price'],
+                    low_price=row['low_price'],
+                    close_price=row['close_price'],
+                    volume=row['volume'],
+                    amount=row.get('amount'),
+                    source=row.get('source', 'akshare')
+                )
+                self.db.add(stock_data)
+                saved_stocks.append(stock_data)
         
         try:
-            # 优先使用 Akshare
-            akshare_data = self.akshare_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-            if not akshare_data.empty:
-                data_list.append(akshare_data)
-                logger.info(f"使用 Akshare 数据源获取 {stock_code}")
-            else:
-                # 尝试东方财富
-                eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-                if not eastmoney_data.empty:
-                    data_list.append(eastmoney_data)
-                    logger.info(f"使用东方财富数据源获取 {stock_code}")
-                else:
-                    # 最后尝试新浪
-                    sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-                    if not sina_data.empty:
-                        data_list.append(sina_data)
-                        logger.info(f"使用新浪数据源获取 {stock_code}")
-        except Exception as e:
-            logger.error(f"获取外部数据时出错: {e}")
-        
-        # 如果没有外部数据，使用合理的模拟数据
-        if not data_list:
-            logger.warning(f"所有数据源都无法获取 {stock_code} {period} 的数据，使用演示数据")
-            using_demo_data = True
-            data_list.append(self.data_processor.generate_sample_data(stock_code, period))
-        
-        try:
-            cleaned_data = self.data_processor.clean_data(data_list[0])
-            
-            saved_stocks = []
-            for _, row in cleaned_data.iterrows():
-                existing = self.db.query(StockData).filter(
-                    StockData.stock_code == row['stock_code'],
-                    StockData.period == row['period'],
-                    StockData.datetime == row['datetime']
-                ).first()
-                
-                if not existing:
-                    stock_data = StockData(
-                        stock_code=row['stock_code'],
-                        stock_name=row.get('stock_name'),
-                        period=row['period'],
-                        datetime=row['datetime'],
-                        open_price=row['open_price'],
-                        high_price=row['high_price'],
-                        low_price=row['low_price'],
-                        close_price=row['close_price'],
-                        volume=row['volume'],
-                        amount=row.get('amount'),
-                        source=row.get('source')
-                    )
-                    self.db.add(stock_data)
-                    saved_stocks.append(stock_data)
-            
             self.db.commit()
-            return saved_stocks
+            logger.info(f"✅ 保存了 {len(saved_stocks)} 条 {stock_code} {period} 数据")
         except Exception as e:
             logger.error(f"保存数据时出错: {e}")
             self.db.rollback()
             return []
+        
+        return saved_stocks
+    
+    def initialize_default_data(self, stock_code: str = "000001") -> bool:
+        logger.info(f"开始初始化默认数据: {stock_code}")
+        
+        try:
+            if self.has_data(stock_code, "1d"):
+                logger.info(f"{stock_code} 已有数据，跳过初始化")
+                return True
+            
+            saved_data = self.fetch_and_save_stock_data(stock_code, "1d")
+            
+            if saved_data:
+                logger.info(f"✅ 成功初始化 {stock_code} 数据: {len(saved_data)} 条")
+                return True
+            else:
+                logger.error(f"❌ 未能初始化 {stock_code} 数据")
+                return False
+                
+        except Exception as e:
+            logger.error(f"初始化默认数据失败: {e}")
+            return False
     
     def get_latest_stock_data(self, stock_code: str, period: str = "1d") -> Optional[StockData]:
         return self.db.query(StockData).filter(
