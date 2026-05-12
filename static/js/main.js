@@ -24,6 +24,11 @@ function setupEventListeners() {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', debounce(refreshData, 300));
     }
+    
+    const loadHistoricalBtn = document.getElementById('loadHistoricalBtn');
+    if (loadHistoricalBtn) {
+        loadHistoricalBtn.addEventListener('click', debounce(loadHistoricalData, 300));
+    }
 }
 
 function initTabs() {
@@ -160,6 +165,31 @@ async function refreshData() {
     } catch (error) {
         console.error('刷新数据失败:', error);
         showMessage('刷新数据失败: ' + error.message, 'error');
+    }
+}
+
+async function loadHistoricalData() {
+    const stockCode = document.getElementById('stockCode').value.trim();
+    
+    if (!stockCode) {
+        showMessage('请先输入股票代码！', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/stocks/load-historical/${stockCode}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        showMessage(result.message, 'info');
+        
+    } catch (error) {
+        console.error('加载历史数据失败:', error);
+        showMessage('加载历史数据失败: ' + error.message, 'error');
     }
 }
 

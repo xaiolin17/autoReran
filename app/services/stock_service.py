@@ -62,19 +62,35 @@ class StockService:
         ).order_by(desc(StockData.datetime)).first()
         return latest.datetime if latest else None
     
+    def get_earliest_date(self, stock_code: str, period: str) -> Optional[datetime]:
+        earliest = self.db.query(StockData).filter(
+            StockData.stock_code == stock_code,
+            StockData.period == period
+        ).order_by(StockData.datetime).first()
+        return earliest.datetime if earliest else None
+    
     def fetch_and_save_stock_data(
         self,
         stock_code: str,
         period: str = "1d",
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        incremental: bool = False
+        incremental: bool = False,
+        historical: bool = False
     ) -> List[StockData]:
         if incremental:
             latest_date = self.get_latest_date(stock_code, period)
             if latest_date:
                 start_date = (latest_date + timedelta(days=1)).strftime("%Y%m%d")
                 logger.info(f"增量更新: 从 {start_date} 开始获取 {stock_code} {period} 数据")
+        
+        if historical:
+            earliest_date = self.get_earliest_date(stock_code, period)
+            if earliest_date:
+                # Calculate end date for historical data: earliest date minus 1 day
+                end_date = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
+                logger.info(f"加载历史数据: 截至 {end_date} 获取 {stock_code} {period} 数据")
+                start_date = None  # Let Akshare get as much as possible
         
         df = self.crawler.fetch_stock_data(stock_code, period, start_date, end_date)
         
