@@ -42,6 +42,25 @@ class AkshareCrawler(BaseCrawler):
             logger.error(f"Akshare获取 {stock_code} 数据失败: {e}")
             return pd.DataFrame()
     
+    def fetch_realtime_data(self, stock_code: str) -> Dict:
+        if not self.available:
+            logger.warning("Akshare not available for realtime data")
+            return {}
+        
+        try:
+            return {}
+        except Exception as e:
+            logger.error(f"Akshare获取实时数据失败: {e}")
+            return {}
+    
+    def fetch_stock_list(self) -> List[Dict]:
+        return [
+            {"code": "000001", "name": "上证指数"},
+            {"code": "399001", "name": "深证成指"},
+            {"code": "600519", "name": "贵州茅台"},
+            {"code": "510300", "name": "沪深300ETF"}
+        ]
+    
     def _fetch_index_data(self, index_code: str, period: str, 
                           start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
         """获取指数数据"""
