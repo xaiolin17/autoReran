@@ -127,39 +127,21 @@ async def init_default_data():
             stock_service = StockService(db)
             
             # 上证指数
-            stock_service.fetch_and_save_stock_data("000001", "1d")
-            stock_service.fetch_and_save_stock_data("000001", "1h")
-            stock_service.fetch_and_save_stock_data("000001", "1w")
-            stock_service.fetch_and_save_stock_data("000001", "1M")
+            for period in ["1d", "1h", "1w", "1M"]:
+                saved = stock_service.fetch_and_save_stock_data("000001", period)
+                if saved:
+                    logger.info(f"✅ 上证指数 {period} 数据初始化完成: {len(saved)} 条")
             
             # 深证成指
-            stock_service.fetch_and_save_stock_data("399001", "1d")
+            saved_sz = stock_service.fetch_and_save_stock_data("399001", "1d")
+            if saved_sz:
+                logger.info(f"✅ 深证成指 1d 数据初始化完成: {len(saved_sz)} 条")
             
             logger.info("✅ 默认数据初始化完成")
         else:
-            # 验证现有数据价格是否合理
-            stmt_check = select(StockData).where(
-                StockData.stock_code == "000001",
-                StockData.period == "1d"
-            ).limit(1)
-            check_result = db.execute(stmt_check)
-            check_data = check_result.scalar_one_or_none()
-            
-            if check_data and check_data.close_price < 2000:
-                logger.warning("检测到旧数据，重新初始化...")
-                db.query(StockData).where(StockData.stock_code == "000001").delete()
-                db.query(StockData).where(StockData.stock_code == "399001").delete()
-                db.commit()
-                
-                stock_service = StockService(db)
-                stock_service.fetch_and_save_stock_data("000001", "1d")
-                stock_service.fetch_and_save_stock_data("000001", "1h")
-                stock_service.fetch_and_save_stock_data("000001", "1w")
-                stock_service.fetch_and_save_stock_data("000001", "1M")
-                stock_service.fetch_and_save_stock_data("399001", "1d")
-                logger.info("✅ 数据重新初始化完成")
-            else:
-                logger.info("✅ 默认数据已存在且有效")
+            logger.info("✅ 默认数据已存在")
+    except Exception as e:
+        logger.error(f"初始化数据失败: {e}")
     finally:
         db.close()
 

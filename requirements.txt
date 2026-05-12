@@ -24,6 +24,7 @@ requests==2.32.3
 beautifulsoup4==4.13.2
 python-multipart==0.0.20
 httpx==0.28.1
+akshare==1.12.72
 
 # Templating
 jinja2==3.1.5

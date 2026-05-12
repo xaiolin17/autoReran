@@ -8,6 +8,7 @@ from app.models.stock_data import StockData
 from app.schemas.stock import StockDataCreate
 from app.crawlers.sina import SinaCrawler
 from app.crawlers.eastmoney import EastMoneyCrawler
+from app.crawlers.akshare_crawler import AkshareCrawler
 from app.crawlers.data_processor import DataProcessor
 from app.core.logger import logger
 from app.core.config import settings
@@ -19,6 +20,7 @@ class StockService:
         self.db = db
         self.sina_crawler = SinaCrawler()
         self.eastmoney_crawler = EastMoneyCrawler()
+        self.akshare_crawler = AkshareCrawler()
         self.data_processor = DataProcessor()
         os.makedirs(settings.MODELS_DIR, exist_ok=True)
         self.cache_enabled = settings.CACHE_ENABLED
@@ -85,31 +87,40 @@ class StockService:
     ) -> List[StockData]:
         logger.info(f"开始获取股票 {stock_code} 数据")
         
-        # 使用可靠的模拟数据源（确保价格正确）
-        logger.info(f"使用可靠模拟数据源获取 {stock_code}")
-        
         data_list = []
         
+        # 首先尝试Akshare（最可靠）
         try:
-            # 先尝试东方财富
-            eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
-            if not eastmoney_data.empty:
-                # 验证价格是否合理
-                if len(eastmoney_data) > 0:
-                    first_close = eastmoney_data['close_price'].iloc[0]
-                    if (stock_code == "000001" and first_close > 2000) or \
-                       (stock_code == "399001" and first_close > 5000) or \
-                       (first_close > 1):
-                        data_list.append(eastmoney_data)
-                        logger.info(f"✅ 使用东方财富数据源: {len(eastmoney_data)} 条")
+            akshare_data = self.akshare_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+            if not akshare_data.empty:
+                data_list.append(akshare_data)
+                logger.info(f"✅ 使用Akshare数据源: {len(akshare_data)} 条")
         except Exception as e:
-            logger.warning(f"东方财富获取失败: {e}")
+            logger.warning(f"Akshare获取失败: {e}")
         
-        # 如果东方财富数据不可用，使用可靠的模拟数据
+        # 如果Akshare失败，尝试东方财富
         if not data_list:
-            logger.info(f"✅ 使用可靠模拟数据源")
-            sample_data = self.data_processor.generate_sample_data(stock_code, period)
-            data_list.append(sample_data)
+            try:
+                eastmoney_data = self.eastmoney_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+                if not eastmoney_data.empty:
+                    data_list.append(eastmoney_data)
+                    logger.info(f"✅ 使用东方财富数据源: {len(eastmoney_data)} 条")
+            except Exception as e:
+                logger.warning(f"东方财富获取失败: {e}")
+        
+        # 如果都失败，尝试新浪
+        if not data_list:
+            try:
+                sina_data = self.sina_crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+                if not sina_data.empty:
+                    data_list.append(sina_data)
+                    logger.info(f"✅ 使用新浪数据源: {len(sina_data)} 条")
+            except Exception as e:
+                logger.warning(f"新浪获取失败: {e}")
+        
+        if not data_list:
+            logger.error(f"❌ 无法获取股票 {stock_code} 的真实数据，所有数据源失败")
+            return []
         
         cleaned_data = self.data_processor.clean_data(data_list[0])
         

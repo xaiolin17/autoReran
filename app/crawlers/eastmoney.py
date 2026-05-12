@@ -94,12 +94,14 @@ class EastMoneyCrawler(BaseCrawler):
         ]
     
     def _convert_code(self, stock_code: str) -> str:
-        # 特殊处理：上证指数 000001 应该是 1.000001
+        # 处理指数
         if stock_code == "000001":
-            return "1.000001"
-        # 深证成指
+            return "1.000001"  # 上证指数
         elif stock_code == "399001":
-            return "0.399001"
+            return "0.399001"  # 深证成指
+        elif stock_code.startswith('688') or stock_code.startswith(('588', '512', '56')):
+            return f"1.{stock_code}"
+        # 处理普通股票
         elif stock_code.startswith(('600', '601', '603', '605', '688')):
             return f"1.{stock_code}"
         else:
