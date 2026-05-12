@@ -19,6 +19,11 @@ function setupEventListeners() {
     if (fetchBtn) {
         fetchBtn.addEventListener('click', debounce(loadData, 300));
     }
+    
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', debounce(refreshData, 300));
+    }
 }
 
 function initTabs() {
@@ -98,6 +103,63 @@ function handleWebSocketMessage(message) {
             break;
         case 'refresh_needed':
             break;
+        case 'download_progress':
+            handleDownloadProgress(message.data);
+            break;
+    }
+}
+
+function handleDownloadProgress(data) {
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    if (!progressContainer || !progressBar || !progressText) return;
+    
+    progressContainer.style.display = 'block';
+    progressBar.style.width = `${data.progress}%`;
+    progressText.textContent = data.message;
+    
+    if (data.status === 'completed') {
+        if (data.new_data_available) {
+            setTimeout(() => {
+                loadData();
+                progressContainer.style.display = 'none';
+            }, 500);
+        } else {
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 2000);
+        }
+    } else if (data.status === 'error') {
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 3000);
+    }
+}
+
+async function refreshData() {
+    const stockCode = document.getElementById('stockCode').value.trim();
+    
+    if (!stockCode) {
+        showMessage('请先输入股票代码！', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/stocks/refresh/${stockCode}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        showMessage(result.message, 'info');
+        
+    } catch (error) {
+        console.error('刷新数据失败:', error);
+        showMessage('刷新数据失败: ' + error.message, 'error');
     }
 }
 

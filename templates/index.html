@@ -25,7 +25,15 @@
             </div>
             <div class="control-group">
                 <button id="fetchBtn" class="btn btn-primary">获取数据</button>
+                <button id="refreshBtn" class="btn btn-secondary">🔄 刷新数据</button>
             </div>
+        </div>
+
+        <div id="progressContainer" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+                <div id="progressBar" class="progress-fill"></div>
+            </div>
+            <span id="progressText">加载中...</span>
         </div>
 
         <div class="charts-container">
