@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
 from app.schemas.stock import StockData, StockDataCreate
 from app.services.stock_service import StockService
+from app.services.indicator_service import IndicatorService
+from app.core.websocket_manager import manager
 
 router = APIRouter()
 
@@ -56,3 +58,88 @@ def get_available_stocks(db: Session = Depends(get_db)):
     service = StockService(db)
     stocks = service.get_available_stocks()
     return {"stocks": stocks}
+
+
+@router.post("/refresh/{stock_code}")
+def refresh_stock_data(
+    stock_code: str,
+    period: str = "1d",
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    service = StockService(db)
+    latest_date = service.get_latest_date(stock_code, period)
+    message = f"发现现有数据，从 {latest_date.date()} 开始增量更新" if latest_date else f"没有现有数据，将下载完整数据"
+    
+    async def background_refresh():
+        try:
+            await manager.broadcast({
+                "type": "download_progress",
+                "data": {
+                    "stock_code": stock_code,
+                    "status": "downloading",
+                    "progress": 10,
+                    "message": "正在从 AkShare 获取数据..."
+                }
+            }, channel="realtime")
+            
+            saved_data = service.fetch_and_save_stock_data(stock_code, period, incremental=True)
+            
+            if saved_data:
+                await manager.broadcast({
+                    "type": "download_progress",
+                    "data": {
+                        "stock_code": stock_code,
+                        "status": "calculating",
+                        "progress": 70,
+                        "message": "正在计算技术指标..."
+                    }
+                }, channel="realtime")
+                
+                indicator_service = IndicatorService(db)
+                indicator_service.calculate_and_save_indicators(stock_code, period)
+                
+                await manager.broadcast({
+                    "type": "download_progress",
+                    "data": {
+                        "stock_code": stock_code,
+                        "status": "completed",
+                        "progress": 100,
+                        "message": f"刷新完成，新增 {len(saved_data)} 条数据",
+                        "new_data_available": True
+                    }
+                }, channel="realtime")
+            else:
+                await manager.broadcast({
+                    "type": "download_progress",
+                    "data": {
+                        "stock_code": stock_code,
+                        "status": "completed",
+                        "progress": 100,
+                        "message": "已是最新数据，无需更新",
+                        "new_data_available": False
+                    }
+                }, channel="realtime")
+                
+        except Exception as e:
+            await manager.broadcast({
+                "type": "download_progress",
+                "data": {
+                    "stock_code": stock_code,
+                    "status": "error",
+                    "progress": 0,
+                    "message": f"刷新失败: {str(e)}"
+                }
+            }, channel="realtime")
+    
+    if background_tasks:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.create_task(background_refresh())
+    
+    return {
+        "message": message,
+        "stock_code": stock_code,
+        "period": period,
+        "incremental": latest_date is not None
+    }
