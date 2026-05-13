@@ -38,21 +38,80 @@ class AkshareCrawler(BaseCrawler):
         logger.error(f"All {self.max_retries} attempts failed. Last error: {str(last_exception)}")
         return None
     
+    def _get_start_end_dates(self, 
+                           start_date: Optional[str] = None, 
+                           end_date: Optional[str] = None, 
+                           default_days: int = 365,
+                           historical_mode: bool = False,
+                           historical_end_date: Optional[str] = None,
+                           historical_days: int = 120) -> tuple:
+        """统一处理 start_date 和 end_date"""
+        # 如果是历史数据模式
+        if historical_mode and historical_end_date:
+            end_dt = datetime.strptime(historical_end_date, "%Y%m%d")
+            end_date = historical_end_date
+            start_dt = end_dt - timedelta(days=historical_days)
+            start_date = start_dt.strftime("%Y%m%d")
+            return start_date, end_date
+        
+        # 正常模式
+        if end_date is None:
+            end_date = datetime.now().strftime("%Y%m%d")
+        
+        if start_date is None:
+            end_dt = datetime.strptime(end_date, "%Y%m%d")
+            start_dt = end_dt - timedelta(days=default_days)
+            start_date = start_dt.strftime("%Y%m%d")
+        
+        # 检查时间范围有效性
+        start_dt = datetime.strptime(start_date, "%Y%m%d")
+        end_dt = datetime.strptime(end_date, "%Y%m%d")
+        
+        if start_dt > end_dt:
+            logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
+            return None, None
+        
+        return start_date, end_date
+    
     def fetch_stock_data(self, stock_code: str, period: str = "1d", 
                         start_date: Optional[str] = None, 
-                        end_date: Optional[str] = None) -> pd.DataFrame:
+                        end_date: Optional[str] = None,
+                        historical_mode: bool = False,
+                        historical_end_date: Optional[str] = None) -> pd.DataFrame:
         if not self.available:
             logger.warning("Akshare 不可用，请安装 Akshare: pip install akshare")
             return pd.DataFrame()
         
         try:
-            # 处理指数代码转换
-            if stock_code == "000001":
-                return self._fetch_index_data("sh000001", period, start_date, end_date)
-            elif stock_code == "399001":
-                return self._fetch_index_data("sz399001", period, start_date, end_date)
+            # 首先统一处理日期
+            processed_start, processed_end = self._get_start_end_dates(
+                start_date=start_date,
+                end_date=end_date,
+                default_days=365,
+                historical_mode=historical_mode,
+                historical_end_date=historical_end_date
+            )
+            
+            if processed_start is None or processed_end is None:
+                return pd.DataFrame()
+            
+            logger.info(f"获取数据: {stock_code} {period} [{processed_start} ~ {processed_end}")
+            
+            # 处理指数代码
+            if stock_code == "000001" or stock_code == "399001":
+                return self._fetch_index_data(
+                    index_code=f"sh{stock_code}" if stock_code == "000001" else f"sz{stock_code}",
+                    period=period,
+                    start_date=processed_start,
+                    end_date=processed_end
+                )
             else:
-                return self._fetch_stock_data(stock_code, period, start_date, end_date)
+                return self._fetch_stock_data(
+                    stock_code=stock_code,
+                    period=period,
+                    start_date=processed_start,
+                    end_date=processed_end
+                )
         except Exception as e:
             logger.error(f"Akshare获取 {stock_code} 数据失败: {str(e)}")
             return pd.DataFrame()
@@ -77,35 +136,16 @@ class AkshareCrawler(BaseCrawler):
         ]
     
     def _fetch_index_data(self, index_code: str, period: str, 
-                          start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
+                          start_date: str, end_date: str) -> pd.DataFrame:
         """获取指数数据"""
         try:
-            # If we have end_date but no start_date (loading historical data), set start_date to 4 months earlier
-            if start_date is None and end_date is not None:
-                end_dt = datetime.strptime(end_date, "%Y%m%d")
-                # Calculate 4 months back (approximating 30 days per month)
-                start_date = (end_dt - timedelta(days=120)).strftime("%Y%m%d")  # ~4 months back
-            elif start_date is None:
-                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
-            
-            if end_date is None:
-                end_date = datetime.now().strftime("%Y%m%d")
-            
-            # Check if start_date > end_date - if yes, return empty DataFrame
-            start_dt = datetime.strptime(start_date, "%Y%m%d")
-            end_dt = datetime.strptime(end_date, "%Y%m%d")
-            if start_dt > end_dt:
-                logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
-                return pd.DataFrame()
-            
-            # 提取纯数字代码，去除 sh/sz 前缀
             code = index_code[2:] if len(index_code) > 2 else index_code
             
             df = None
             
             # 尝试方法 1
             try:
-                logger.info(f"尝试第 1 种 API 方法，日期范围: {start_date} ~ {end_date}")
+                logger.info(f"尝试第 1 种 API 方法")
                 if period == "1d":
                     df = self._retry_fetch(ak.index_zh_a_hist, symbol=code, period="daily", start_date=start_date, end_date=end_date)
                 elif period == "1w":
@@ -118,10 +158,9 @@ class AkshareCrawler(BaseCrawler):
                 logger.warning(f"第 1 种方法失败: {e}")
                 df = None
             
-            # 如果方法1失败，尝试方法 2
             if df is None or df.empty:
                 try:
-                    logger.info(f"尝试第 2 种 API 方法，日期范围: {start_date} ~ {end_date}")
+                    logger.info(f"尝试第 2 种 API 方法")
                     if period == "1d":
                         df = self._retry_fetch(ak.index_zh_a_hist_em, symbol=code, period="daily", start_date=start_date, end_date=end_date)
                     elif period == "1w":
@@ -138,7 +177,6 @@ class AkshareCrawler(BaseCrawler):
                 logger.warning(f"AkShare 返回空数据: index={index_code}, period={period}")
                 return pd.DataFrame()
             
-            # 标准化列名
             result = []
             for _, row in df.iterrows():
                 result.append({
@@ -163,28 +201,9 @@ class AkshareCrawler(BaseCrawler):
             return pd.DataFrame()
     
     def _fetch_stock_data(self, stock_code: str, period: str, 
-                          start_date: Optional[str], end_date: Optional[str]) -> pd.DataFrame:
+                          start_date: str, end_date: str) -> pd.DataFrame:
         """获取股票数据"""
         try:
-            # If we have end_date but no start_date (loading historical data), set start_date to 4 months earlier
-            if start_date is None and end_date is not None:
-                end_dt = datetime.strptime(end_date, "%Y%m%d")
-                # Calculate 4 months back (approximating 30 days per month)
-                start_date = (end_dt - timedelta(days=120)).strftime("%Y%m%d")  # ~4 months back
-            elif start_date is None:
-                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
-            
-            if end_date is None:
-                end_date = datetime.now().strftime("%Y%m%d")
-            
-            # Check if start_date > end_date - if yes, return empty DataFrame
-            start_dt = datetime.strptime(start_date, "%Y%m%d")
-            end_dt = datetime.strptime(end_date, "%Y%m%d")
-            if start_dt > end_dt:
-                logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
-                return pd.DataFrame()
-            
-            # 确定市场并添加前缀
             if stock_code.startswith(('600', '601', '603', '605', '688')):
                 symbol = f"sh{stock_code}"
             else:
@@ -192,9 +211,8 @@ class AkshareCrawler(BaseCrawler):
             
             df = None
             
-            # 尝试方法 1
             try:
-                logger.info(f"尝试第 1 种 API 方法，日期范围: {start_date} ~ {end_date}")
+                logger.info(f"尝试第 1 种 API 方法")
                 if period == "1d":
                     df = self._retry_fetch(ak.stock_zh_a_hist, symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
                 elif period == "1w":
@@ -207,10 +225,9 @@ class AkshareCrawler(BaseCrawler):
                 logger.warning(f"第 1 种方法失败: {e}")
                 df = None
             
-            # 如果方法1失败，尝试方法 2
             if df is None or df.empty:
                 try:
-                    logger.info(f"尝试第 2 种 API 方法，日期范围: {start_date} ~ {end_date}")
+                    logger.info(f"尝试第 2 种 API 方法")
                     if period == "1d":
                         df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
                     elif period == "1w":
@@ -229,7 +246,6 @@ class AkshareCrawler(BaseCrawler):
             
             stock_name = df.iloc[0].get('股票名称', stock_code) if len(df) > 0 else stock_code
             
-            # 标准化列名
             result = []
             for _, row in df.iterrows():
                 result.append({
@@ -252,3 +268,4 @@ class AkshareCrawler(BaseCrawler):
         except Exception as e:
             logger.error(f"获取股票 {stock_code} 数据失败: {str(e)}")
             return pd.DataFrame()
+

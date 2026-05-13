@@ -95,13 +95,23 @@ class StockService:
         if historical:
             earliest_date = self.get_earliest_date(stock_code, period)
             if earliest_date:
-                # For historical data: start date is 4 months before earliest date, end date is earliest date minus 1 day
-                end_date = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
-                earliest_date_only = earliest_date.date()
-                start_date = (earliest_date_only - timedelta(days=120)).strftime("%Y%m%d")  # ~4 months back
-                logger.info(f"加载历史数据: 从 {start_date} 到 {end_date} 获取 {stock_code} {period} 数据")
-        
-        df = self.crawler.fetch_stock_data(stock_code, period, start_date, end_date)
+                historical_end_date = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
+                logger.info(f"加载历史数据: 截止 {historical_end_date} 获取 {stock_code} {period} 数据")
+                df = self.crawler.fetch_stock_data(
+                    stock_code=stock_code, 
+                    period=period, 
+                    historical_mode=True, 
+                    historical_end_date=historical_end_date
+                )
+            else:
+                df = self.crawler.fetch_stock_data(stock_code=stock_code, period=period)
+        else:
+            df = self.crawler.fetch_stock_data(
+                stock_code=stock_code, 
+                period=period, 
+                start_date=start_date, 
+                end_date=end_date
+            )
         
         if df.empty:
             logger.warning(f"未能从 Akshare 获取到数据: {stock_code} {period}")
