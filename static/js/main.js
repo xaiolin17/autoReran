@@ -364,11 +364,10 @@ function updateCharts(data) {
     console.log('DEBUG - 第一条数据datetime:', data[0]?.datetime);
     console.log('DEBUG - 最后一条数据datetime:', data[data.length-1]?.datetime);
     
-    // 关键修复：API返回的是ASC（旧→新），但ECharts显示反了
-    // 所以我们需要手动反转数据，确保图表从左到右显示旧→新
-    const sortedData = [...data].reverse();
-    console.log('DEBUG - 反转后第一条:', sortedData[0]?.datetime);
-    console.log('DEBUG - 反转后最后一条:', sortedData[sortedData.length-1]?.datetime);
+    // API返回的是ASC（旧→新），ECharts从左到右渲染数组，所以直接用即可
+    const sortedData = data;
+    console.log('DEBUG - sortedData第一条:', sortedData[0]?.datetime);
+    console.log('DEBUG - sortedData最后一条:', sortedData[sortedData.length-1]?.datetime);
     
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
     console.log('DEBUG - dates数组第一个:', dates[0]);
