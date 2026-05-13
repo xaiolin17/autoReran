@@ -360,10 +360,17 @@ async function loadData() {
 function updateCharts(data) {
     if (!data || data.length === 0 || !klineChart) return;
 
+    // 调试：打印数据顺序
+    console.log('DEBUG - API返回数据条数:', data.length);
+    console.log('DEBUG - 第一条数据datetime:', data[0]?.datetime);
+    console.log('DEBUG - 最后一条数据datetime:', data[data.length-1]?.datetime);
+    
     // 后端返回的数据是 datetime ASC（从旧到新），直接用即可
     // 从左到右：旧 → 新
     const sortedData = data;
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
+    console.log('DEBUG - dates数组第一个:', dates[0]);
+    console.log('DEBUG - dates数组最后一个:', dates[dates.length-1]);
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
     const closes = sortedData.map(d => d.close_price);
