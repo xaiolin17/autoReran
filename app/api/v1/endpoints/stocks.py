@@ -183,15 +183,31 @@ def load_historical_data(
     service = StockService(db)
     earliest_date = service.get_earliest_date(stock_code, period)
     
-    historical_end_date_str = None
-    if earliest_date:
-        historical_end_date_str = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
-        message = f"发现现有数据，截至 {historical_end_date_str} 之前获取历史数据"
-    else:
+    if not earliest_date:
+        # 数据库中没有数据，直接下载
         message = f"没有现有数据，将下载完整历史数据"
-    
-    thread = threading.Thread(target=_run_load_historical_task, args=(stock_code, period), daemon=True)
-    thread.start()
+        thread = threading.Thread(target=_run_load_historical_task, args=(stock_code, period), daemon=True)
+        thread.start()
+    else:
+        # 数据库中已有数据，尝试获取更多历史数据
+        # 先计算要获取的历史数据范围（往前3个月）
+        historical_end_date = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
+        historical_start_date = (earliest_date - timedelta(days=90)).strftime("%Y%m%d")
+        
+        # 同步获取数据
+        saved_data = service.fetch_and_save_stock_data(
+            stock_code, period, 
+            start_date=historical_start_date, 
+            end_date=historical_end_date
+        )
+        
+        if saved_data:
+            # 获取到新数据，计算指标
+            indicator_service = IndicatorService(db)
+            indicator_service.calculate_and_save_indicators(stock_code, period)
+            message = f"加载历史数据完成，新增 {len(saved_data)} 条记录"
+        else:
+            message = f"没有更多历史数据（最早数据：{earliest_date.strftime('%Y-%m-%d')}）"
     
     return {
         "message": message,

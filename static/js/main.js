@@ -188,7 +188,13 @@ async function loadHistoricalData() {
         });
         
         const result = await response.json();
-        showMessage(result.message, 'info');
+        showMessage(result.message, result.has_existing_data ? 'success' : 'info');
+        
+        // 如果有新数据加载，刷新图表
+        if (result.has_existing_data) {
+            dataCache.clear();
+            setTimeout(() => loadData(), 300);
+        }
         
     } catch (error) {
         console.error('加载历史数据失败:', error);
