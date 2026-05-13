@@ -73,6 +73,20 @@ class AkshareCrawler(BaseCrawler):
         
         return start_date, end_date
     
+    def _normalize_stock_code(self, stock_code: str) -> str:
+        """标准化股票代码，去除 sh/sz 前缀"""
+        if len(stock_code) > 6 and stock_code[:2] in ('sh', 'sz'):
+            return stock_code[2:]
+        return stock_code
+    
+    def _add_market_prefix(self, stock_code: str) -> str:
+        """为股票代码添加市场前缀"""
+        code = self._normalize_stock_code(stock_code)
+        if code.startswith(('600', '601', '603', '605', '688')):
+            return f"sh{code}"
+        else:
+            return f"sz{code}"
+    
     def fetch_stock_data(self, stock_code: str, period: str = "1d", 
                         start_date: Optional[str] = None, 
                         end_date: Optional[str] = None,
@@ -83,7 +97,10 @@ class AkshareCrawler(BaseCrawler):
             return pd.DataFrame()
         
         try:
-            # 首先统一处理日期
+            # 标准化股票代码（去除前缀）
+            clean_code = self._normalize_stock_code(stock_code)
+            
+            # 统一处理日期
             processed_start, processed_end = self._get_start_end_dates(
                 start_date=start_date,
                 end_date=end_date,
@@ -95,19 +112,20 @@ class AkshareCrawler(BaseCrawler):
             if processed_start is None or processed_end is None:
                 return pd.DataFrame()
             
-            logger.info(f"获取数据: {stock_code} {period} [{processed_start} ~ {processed_end}")
+            logger.info(f"获取数据: {clean_code} {period} [{processed_start} ~ {processed_end}]")
             
-            # 处理指数代码
-            if stock_code == "000001" or stock_code == "399001":
+            # 处理指数
+            if clean_code == "000001" or clean_code == "399001":
+                index_code = f"sh{clean_code}" if clean_code == "000001" else f"sz{clean_code}"
                 return self._fetch_index_data(
-                    index_code=f"sh{stock_code}" if stock_code == "000001" else f"sz{stock_code}",
+                    index_code=index_code,
                     period=period,
                     start_date=processed_start,
                     end_date=processed_end
                 )
             else:
                 return self._fetch_stock_data(
-                    stock_code=stock_code,
+                    stock_code=clean_code,
                     period=period,
                     start_date=processed_start,
                     end_date=processed_end
@@ -204,23 +222,25 @@ class AkshareCrawler(BaseCrawler):
                           start_date: str, end_date: str) -> pd.DataFrame:
         """获取股票数据"""
         try:
-            if stock_code.startswith(('600', '601', '603', '605', '688')):
-                symbol = f"sh{stock_code}"
-            else:
-                symbol = f"sz{stock_code}"
+            # 标准化代码
+            clean_code = self._normalize_stock_code(stock_code)
+            # 带前缀的代码（用于需要前缀的 API）
+            prefixed_code = self._add_market_prefix(clean_code)
             
             df = None
             
             try:
                 logger.info(f"尝试第 1 种 API 方法")
+                # stock_zh_a_hist 不需要前缀
                 if period == "1d":
-                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
+                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=clean_code, period="daily", start_date=start_date, end_date=end_date)
                 elif period == "1w":
-                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=stock_code, period="weekly", start_date=start_date, end_date=end_date)
+                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=clean_code, period="weekly", start_date=start_date, end_date=end_date)
                 elif period == "1M":
-                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=stock_code, period="monthly", start_date=start_date, end_date=end_date)
+                    df = self._retry_fetch(ak.stock_zh_a_hist, symbol=clean_code, period="monthly", start_date=start_date, end_date=end_date)
                 else:
-                    df = self._retry_fetch(ak.stock_zh_a_hist_min_em, symbol=symbol, period="60", start_date=start_date, end_date=end_date)
+                    # stock_zh_a_hist_min_em 需要前缀
+                    df = self._retry_fetch(ak.stock_zh_a_hist_min_em, symbol=prefixed_code, period="60", start_date=start_date, end_date=end_date)
             except Exception as e:
                 logger.warning(f"第 1 种方法失败: {e}")
                 df = None
@@ -228,14 +248,16 @@ class AkshareCrawler(BaseCrawler):
             if df is None or df.empty:
                 try:
                     logger.info(f"尝试第 2 种 API 方法")
+                    # stock_zh_a_hist_em 不需要前缀
                     if period == "1d":
-                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
+                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=clean_code, period="daily", start_date=start_date, end_date=end_date)
                     elif period == "1w":
-                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=stock_code, period="weekly", start_date=start_date, end_date=end_date)
+                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=clean_code, period="weekly", start_date=start_date, end_date=end_date)
                     elif period == "1M":
-                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=stock_code, period="monthly", start_date=start_date, end_date=end_date)
+                        df = self._retry_fetch(ak.stock_zh_a_hist_em, symbol=clean_code, period="monthly", start_date=start_date, end_date=end_date)
                     else:
-                        df = self._retry_fetch(ak.stock_zh_a_hist_min_em, symbol=symbol, period="60", start_date=start_date, end_date=end_date)
+                        # stock_zh_a_hist_min_em 需要前缀
+                        df = self._retry_fetch(ak.stock_zh_a_hist_min_em, symbol=prefixed_code, period="60", start_date=start_date, end_date=end_date)
                 except Exception as e:
                     logger.warning(f"第 2 种方法失败: {e}")
                     df = None
