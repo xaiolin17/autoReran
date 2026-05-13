@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from app.schemas.option import OptionData, OptionChainData
 from app.core.config import settings
+from app.core.logger import logger
 
 
 class OptionCrawler:
@@ -30,7 +31,7 @@ class OptionCrawler:
             # 尝试获取真实期权数据
             return self._fetch_real_option_data(stock_code)
         except Exception as e:
-            print(f"获取真实期权数据错误: {e}")
+            logger.error(f"获取真实期权数据错误: {e}", exc_info=True)
             # 如果真实数据获取失败，提供空数据提示
             return self._get_fallback_data(stock_code)
     
@@ -105,7 +106,7 @@ class OptionCrawler:
                 if len(data) >= 4:
                     return float(data[3])
         except Exception as e:
-            print(f"获取标的价格失败: {e}")
+            logger.error(f"获取标的价格失败: {e}", exc_info=True)
         
         # 如果获取失败，返回一个合理的默认值
         default_prices = {'510300': 3.8, '510500': 6.2, '510050': 2.8, '159915': 2.5, '159919': 4.0}
@@ -144,7 +145,7 @@ class OptionCrawler:
                             codes.append(item.get('f12', ''))
                     return codes
         except Exception as e:
-            print(f"获取期权代码列表失败: {e}")
+            logger.error(f"获取期权代码列表失败: {e}", exc_info=True)
         
         # 如果获取失败，返回一些常见期权代码
         return self._get_fallback_option_codes(stock_code)
@@ -197,11 +198,11 @@ class OptionCrawler:
                                     'vega': random.random() * 0.5
                                 }
                     except Exception as e:
-                        print(f"获取期权{code}报价失败: {e}")
+                        logger.error(f"获取期权{code}报价失败: {e}", exc_info=True)
                         continue
         
         except Exception as e:
-            print(f"获取期权报价失败: {e}")
+            logger.error(f"获取期权报价失败: {e}", exc_info=True)
         
         return quotes
     

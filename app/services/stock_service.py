@@ -3,7 +3,7 @@ from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime, timedelta
 import pandas as pd
-from app.core.logger import logger
+from app.core.logger import logger, log_function_call
 from app.models.stock_data import StockData
 from app.schemas.stock import StockDataCreate
 from app.crawlers.akshare_crawler import AkshareCrawler
@@ -69,57 +69,63 @@ class StockService:
         ).order_by(StockData.datetime).first()
         return earliest.datetime if earliest else None
     
+    @log_function_call
     def fetch_and_save_stock_data(
         self,
         stock_code: str,
         period: str = "1d",
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        incremental: bool = False,
-        historical: bool = False
+        incremental: bool = False
     ) -> List[StockData]:
+        """
+        获取并保存股票数据
+        
+        Args:
+            stock_code: 股票代码
+            period: 时间周期（如 1d, 1h, 1w, 1M）
+            start_date: 开始日期
+            end_date: 结束日期
+            incremental: 是否增量更新
+        
+        Returns:
+            List[StockData]: 保存的数据列表
+        """
+        logger.info(f"开始获取并保存股票数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}, incremental={incremental}")
+        
         if incremental:
+            logger.debug(f"执行增量更新模式")
             latest_date = self.get_latest_date(stock_code, period)
             today = datetime.now().date()
             
             if latest_date:
                 latest_date_only = latest_date.date()
                 if latest_date_only >= today:
-                    # Already have data up to today or later, no need to fetch
-                    logger.info(f"已有数据已是最新 (截止 {latest_date_only}，无需更新")
+                    logger.info(f"已有数据已是最新 (截止 {latest_date_only})，无需更新")
                     return []
                 
                 start_date = (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
                 logger.info(f"增量更新: 从 {start_date} 开始获取 {stock_code} {period} 数据")
         
-        if historical:
-            earliest_date = self.get_earliest_date(stock_code, period)
-            if earliest_date:
-                historical_end_date = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
-                logger.info(f"加载历史数据: 截止 {historical_end_date} 获取 {stock_code} {period} 数据")
-                df = self.crawler.fetch_stock_data(
-                    stock_code=stock_code, 
-                    period=period, 
-                    historical_mode=True, 
-                    historical_end_date=historical_end_date
-                )
-            else:
-                df = self.crawler.fetch_stock_data(stock_code=stock_code, period=period)
-        else:
-            df = self.crawler.fetch_stock_data(
-                stock_code=stock_code, 
-                period=period, 
-                start_date=start_date, 
-                end_date=end_date
-            )
+        logger.debug(f"开始从爬虫获取数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
+        df = self.crawler.fetch_stock_data(
+            stock_code=stock_code, 
+            period=period, 
+            start_date=start_date, 
+            end_date=end_date
+        )
         
         if df.empty:
             logger.warning(f"未能从 Akshare 获取到数据: {stock_code} {period}")
             return []
         
+        logger.info(f"从数据源获取到 {len(df)} 条原始数据，开始清洗")
         cleaned_data = self.data_processor.clean_data(df)
+        logger.info(f"数据清洗完成，剩余 {len(cleaned_data)} 条有效数据")
         
         saved_stocks = []
+        duplicate_count = 0
+        
         for _, row in cleaned_data.iterrows():
             existing = self.db.query(StockData).filter(
                 StockData.stock_code == row['stock_code'],
@@ -143,15 +149,20 @@ class StockService:
                 )
                 self.db.add(stock_data)
                 saved_stocks.append(stock_data)
+            else:
+                duplicate_count += 1
+        
+        logger.info(f"去重后新增 {len(saved_stocks)} 条数据，跳过 {duplicate_count} 条重复数据")
         
         try:
             self.db.commit()
-            logger.info(f"✅ 保存了 {len(saved_stocks)} 条 {stock_code} {period} 数据")
+            logger.info(f"✅ 成功保存了 {len(saved_stocks)} 条 {stock_code} {period} 数据")
         except Exception as e:
             logger.error(f"保存数据时出错: {e}")
             self.db.rollback()
             return []
         
+        logger.info(f"股票数据获取和保存完成: stock_code={stock_code}, 新增数据条数={len(saved_stocks)}")
         return saved_stocks
     
     def initialize_default_data(self, stock_code: str = "000001") -> bool:

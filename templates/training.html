@@ -20,6 +20,16 @@
         <div class="content-grid">
             <div class="form-box">
                 <h2>训练新模型</h2>
+                
+                <div id="noLabeledDataWarning" style="display: none;" class="warning-box">
+                    <div class="warning-icon">⚠️</div>
+                    <div class="warning-content">
+                        <h3>无标签数据警告</h3>
+                        <p>请先在数据查看页面标记买入/卖出数据后再进行模型训练</p>
+                        <a href="/" class="btn btn-warning">前往数据查看页面</a>
+                    </div>
+                </div>
+
                 <form id="trainForm" class="form">
                     <div class="form-group">
                         <label for="trainStockCode">股票代码</label>
@@ -53,6 +63,15 @@
 
             <div class="list-box">
                 <h2>已训练模型</h2>
+                
+                <div class="form-group">
+                    <label for="backtestModelSelect">回测模型选择</label>
+                    <select id="backtestModelSelect">
+                        <option value="">-- 请选择模型用于回测 --</option>
+                    </select>
+                    <p class="help-text">选择模型后，回测页面将使用此模型进行回测</p>
+                </div>
+
                 <div id="modelsList" class="models-list">
                     <div class="empty-state">
                         <span class="empty-state-icon">🤖</span>

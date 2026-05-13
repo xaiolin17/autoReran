@@ -57,7 +57,14 @@ class DataProcessor:
         if df.empty:
             return df
         
-        df = df.dropna(subset=['open_price', 'high_price', 'low_price', 'close_price', 'volume'])
+        required_cols = ['open_price', 'high_price', 'low_price', 'close_price', 'volume']
+        available_cols = [col for col in required_cols if col in df.columns]
+        
+        if len(available_cols) < len(required_cols):
+            df = df.dropna(subset=available_cols)
+        else:
+            df = df.dropna(subset=required_cols)
+        
         df = df[df['volume'] >= 0]
         df = df[df['high_price'] >= df['low_price']]
         df = df[df['high_price'] >= df['open_price']]

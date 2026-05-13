@@ -1,7 +1,27 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadModels();
     setupEventListeners();
+    checkLabeledData();
 });
+
+async function checkLabeledData() {
+    const stockCode = document.getElementById('trainStockCode').value.trim();
+    if (!stockCode) return;
+    
+    try {
+        const response = await fetch(`/api/v1/ml/check-labeled-data?stock_code=${stockCode}`);
+        const result = await response.json();
+        
+        const warningBox = document.getElementById('noLabeledDataWarning');
+        if (!result.has_labeled_data) {
+            warningBox.style.display = 'flex';
+        } else {
+            warningBox.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('检查标签数据失败:', error);
+    }
+}
 
 function showMessage(message, type = 'info') {
     const msgDiv = document.createElement('div');
@@ -33,9 +53,22 @@ function showMessage(message, type = 'info') {
 
 function setupEventListeners() {
     document.getElementById('trainForm').addEventListener('submit', trainModel);
-    document.getElementById('predictBtn').addEventListener('click', makePrediction);
-    document.getElementById('predictSignalBtn').addEventListener('click', makeSignalPrediction);
-    document.getElementById('ensemblePredictBtn').addEventListener('click', makeEnsemblePrediction);
+    document.getElementById('trainStockCode').addEventListener('change', checkLabeledData);
+    
+    const predictBtn = document.getElementById('predictBtn');
+    if (predictBtn) {
+        predictBtn.addEventListener('click', makePrediction);
+    }
+    
+    const predictSignalBtn = document.getElementById('predictSignalBtn');
+    if (predictSignalBtn) {
+        predictSignalBtn.addEventListener('click', makeSignalPrediction);
+    }
+    
+    const ensemblePredictBtn = document.getElementById('ensemblePredictBtn');
+    if (ensemblePredictBtn) {
+        ensemblePredictBtn.addEventListener('click', makeEnsemblePrediction);
+    }
 }
 
 async function trainModel(e) {
@@ -55,6 +88,18 @@ async function trainModel(e) {
     if (!modelName) {
         showMessage('请输入模型名称！', 'warning');
         return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/ml/check-labeled-data?stock_code=${stockCode}`);
+        const result = await response.json();
+        
+        if (!result.has_labeled_data) {
+            showMessage('请先在数据查看页面标记买入/卖出数据后再进行模型训练', 'warning');
+            return;
+        }
+    } catch (error) {
+        console.error('检查标签数据失败:', error);
     }
     
     const statusDiv = document.getElementById('trainingStatus');
@@ -154,17 +199,29 @@ function displayModels(models) {
 }
 
 function updateModelSelect(models) {
-    const select = document.getElementById('predictModel');
-    select.innerHTML = '<option value="">-- 请选择模型 --</option>';
-    models.forEach(model => {
-        select.innerHTML += `<option value="${model.id}">${model.model_name} (${model.stock_code})</option>`;
-    });
+    const predictSelect = document.getElementById('predictModel');
+    if (predictSelect) {
+        predictSelect.innerHTML = '<option value="">-- 请选择模型 --</option>';
+        models.forEach(model => {
+            predictSelect.innerHTML += `<option value="${model.id}">${model.model_name} (${model.stock_code})</option>`;
+        });
+    }
+    
+    const backtestSelect = document.getElementById('backtestModelSelect');
+    if (backtestSelect) {
+        backtestSelect.innerHTML = '<option value="">-- 请选择模型用于回测 --</option>';
+        models.forEach(model => {
+            backtestSelect.innerHTML += `<option value="${model.id}">${model.model_name} - ${model.model_type} (准确率: ${(model.accuracy * 100).toFixed(1)}%)</option>`;
+        });
+    }
     
     updateEnsembleModelsList(models);
 }
 
 function updateEnsembleModelsList(models) {
     const container = document.getElementById('ensembleModelsList');
+    if (!container) return;
+    
     if (!models || models.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="padding: 30px 20px;">

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ARN</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260513-v2">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 </head>
 <body>
@@ -24,48 +24,55 @@
                 <input type="text" id="stockCode" value="000001" placeholder="输入股票/ETF代码">
             </div>
             <div class="control-group">
+                <label for="startDate">开始日期</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="control-group">
+                <label for="endDate">结束日期</label>
+                <input type="date" id="endDate">
+            </div>
+            <div class="control-group">
                 <button id="fetchBtn" class="btn btn-primary">获取数据</button>
                 <button id="refreshBtn" class="btn btn-secondary">🔄 刷新数据</button>
-                <button id="loadHistoricalBtn" class="btn btn-success">📜 加载历史数据</button>
             </div>
         </div>
 
-        <div id="progressContainer" class="progress-container" style="display: none;">
-            <div class="progress-bar">
-                <div id="progressBar" class="progress-fill"></div>
+        <div id="progressBox" class="progress-box" style="display: none;">
+            <div class="progress-box-header">
+                <span class="progress-box-title">后台任务进度</span>
+                <button id="closeProgressBox" class="progress-box-close">×</button>
             </div>
-            <span id="progressText">加载中...</span>
-        </div>
-
-        <div class="charts-container">
-            <div class="section-header">
-                <h2>市场走势</h2>
+            <div class="progress-box-content">
+                <div class="progress-box-bar">
+                    <div id="progressBoxFill" class="progress-box-fill"></div>
+                </div>
+                <span id="progressBoxStep" class="progress-box-step">--</span>
+                <span id="progressBoxPercent" class="progress-box-percent">0%</span>
             </div>
-            <div id="klineChart" class="kline-chart"></div>
         </div>
 
         <div class="indicators-container">
             <div class="section-header">
-                <h2>技术指标</h2>
+                <h2>K线与指标</h2>
             </div>
-            <div class="tabs">
-                <button class="tab active" data-tab="kdj">KDJ</button>
-                <button class="tab" data-tab="macd">MACD</button>
+            <div class="signal-toggle-container">
+                <label class="signal-toggle-label" for="signalToggle">
+                    <span class="signal-toggle-text">显示交易信号</span>
+                    <input type="checkbox" id="signalToggle" class="signal-toggle-input">
+                    <span class="signal-toggle-switch"></span>
+                </label>
             </div>
-            <div id="kdjChart" class="indicator-chart"></div>
-            <div id="macdChart" class="indicator-chart hidden"></div>
+            <div class="indicator-tabs">
+                <button class="indicator-tab active" data-indicator="macd">MACD</button>
+                <button class="indicator-tab" data-indicator="kdj">KDJ</button>
+            </div>
+            <div id="mainChart" class="main-chart"></div>
         </div>
 
-        <div class="signals-section">
-            <div class="section-header">
-                <h2>交易信号</h2>
-            </div>
-            <div id="signalsContainer" class="signals-grid">
-                <div class="empty-state">
-                    <span class="empty-state-icon">📊</span>
-                    <p>还没有交易数据，点击"获取数据"按钮开始体验</p>
-                </div>
-            </div>
+        <div id="markPopupMenu" class="mark-popup-menu" style="display: none;">
+            <button class="mark-popup-btn mark-buy" data-action="buy">📈 买入</button>
+            <button class="mark-popup-btn mark-sell" data-action="sell">📉 卖出</button>
+            <button class="mark-popup-btn mark-clear" data-action="clear">🗑️ 清除标记</button>
         </div>
     </div>
 

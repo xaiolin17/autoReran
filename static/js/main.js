@@ -1,53 +1,166 @@
 let currentData = null;
-let klineChart = null;
-let kdjChart = null;
-let macdChart = null;
+let mainChart = null;
+let currentIndicator = 'macd';
 let wsConnection = null;
 let dataCache = new Map();
 let CACHE_TTL = 30000;
+let currentStockCode = null;
+
+let showSignalToggle = false;
+let marks = new Map();
+let markPopupTarget = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    initCharts();
+    console.log('=== DOMContentLoaded ===');
+    initChart();
     initWebSocket();
-    initTabs();
+    initIndicatorTabs();
+    initDatePickers();
+    initSignalToggle();
+    initMarkPopupMenu();
     loadData();
     setupEventListeners();
 });
+
+function initDatePickers() {
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+
+    const formatDate = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const startDateEl = document.getElementById('startDate');
+    const endDateEl = document.getElementById('endDate');
+    if (startDateEl) startDateEl.value = formatDate(thirtyDaysAgo);
+    if (endDateEl) endDateEl.value = formatDate(today);
+}
+
+function initSignalToggle() {
+    const toggle = document.getElementById('signalToggle');
+    if (toggle) {
+        toggle.addEventListener('change', () => {
+            showSignalToggle = toggle.checked;
+            if (currentData) {
+                updateCharts(currentData);
+            }
+        });
+    }
+}
+
+function initMarkPopupMenu() {
+    const menu = document.getElementById('markPopupMenu');
+    if (!menu) return;
+
+    menu.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.mark-popup-btn');
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        if (markPopupTarget && currentData && currentStockCode) {
+            if (action === 'buy') {
+                marks.set(markPopupTarget.index, { type: 'buy', symbol: 'B' });
+                await saveMarkToDB(currentStockCode, markPopupTarget.date, '买入');
+            } else if (action === 'sell') {
+                marks.set(markPopupTarget.index, { type: 'sell', symbol: 'S' });
+                await saveMarkToDB(currentStockCode, markPopupTarget.date, '卖出');
+            } else if (action === 'clear') {
+                marks.delete(markPopupTarget.index);
+                await saveMarkToDB(currentStockCode, markPopupTarget.date, null);
+            }
+            updateCharts(currentData);
+        }
+
+        menu.style.display = 'none';
+        markPopupTarget = null;
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && e.target !== mainChart?.getZr()?.dom) {
+            menu.style.display = 'none';
+            markPopupTarget = null;
+        }
+    });
+}
+
+async function saveMarkToDB(stockCode, date, label) {
+    try {
+        await fetch(`/api/v1/stocks/mark`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stock_code: stockCode, date, label })
+        });
+    } catch (error) {
+        console.error('保存标记失败:', error);
+    }
+}
+
+async function loadMarksFromDB(stockCode) {
+    try {
+        const response = await fetch(`/api/v1/stocks/marks?stock_code=${stockCode}`);
+        if (!response.ok) return [];
+        const marksData = await response.json();
+        
+        const marksMap = new Map();
+        if (currentData) {
+            const dateToIndex = new Map();
+            currentData.forEach((d, i) => {
+                const dateStr = new Date(d.datetime).toISOString().split('T')[0];
+                dateToIndex.set(dateStr, i);
+            });
+            
+            marksData.forEach(m => {
+                const dateStr = new Date(m.datetime).toISOString().split('T')[0];
+                const index = dateToIndex.get(dateStr);
+                if (index !== undefined) {
+                    marksMap.set(index, {
+                        type: m.label === '买入' ? 'buy' : 'sell',
+                        symbol: m.label === '买入' ? 'B' : 'S'
+                    });
+                }
+            });
+        }
+        
+        return marksMap;
+    } catch (error) {
+        console.error('加载标记失败:', error);
+        return new Map();
+    }
+}
 
 function setupEventListeners() {
     const fetchBtn = document.getElementById('fetchBtn');
     if (fetchBtn) {
         fetchBtn.addEventListener('click', debounce(loadData, 300));
     }
-    
+
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', debounce(refreshData, 300));
     }
-    
-    const loadHistoricalBtn = document.getElementById('loadHistoricalBtn');
-    if (loadHistoricalBtn) {
-        loadHistoricalBtn.addEventListener('click', debounce(loadHistoricalData, 300));
+
+    const closeBtn = document.getElementById('closeProgressBox');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            document.getElementById('progressBox').style.display = 'none';
+        });
     }
 }
 
-function initTabs() {
-    const tabs = document.querySelectorAll('.tab');
+function initIndicatorTabs() {
+    const tabs = document.querySelectorAll('.indicator-tab');
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            
-            const tabName = tab.dataset.tab;
-            document.querySelectorAll('.indicator-chart').forEach(chart => {
-                chart.classList.add('hidden');
-            });
-            document.getElementById(`${tabName}Chart`).classList.remove('hidden');
-            
-            if (tabName === 'kdj' && kdjChart) {
-                kdjChart.resize();
-            } else if (tabName === 'macd' && macdChart) {
-                macdChart.resize();
+
+            currentIndicator = tab.dataset.indicator;
+            if (currentData) {
+                updateCharts(currentData);
             }
         });
     });
@@ -69,9 +182,9 @@ function initWebSocket() {
     const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
-    
+
     wsConnection = new WebSocket(wsUrl);
-    
+
     wsConnection.onopen = () => {
         console.log('WebSocket连接已建立');
         wsConnection.send(JSON.stringify({
@@ -79,7 +192,7 @@ function initWebSocket() {
             channel: 'realtime'
         }));
     };
-    
+
     wsConnection.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
@@ -88,12 +201,12 @@ function initWebSocket() {
             console.error('解析WebSocket消息失败:', e);
         }
     };
-    
+
     wsConnection.onclose = () => {
         console.log('WebSocket连接已关闭，尝试重新连接...');
         setTimeout(initWebSocket, 3000);
     };
-    
+
     wsConnection.onerror = (error) => {
         console.error('WebSocket连接错误:', error);
     };
@@ -115,90 +228,61 @@ function handleWebSocketMessage(message) {
 }
 
 function handleDownloadProgress(data) {
-    const progressContainer = document.getElementById('progressContainer');
-    const progressBar = document.getElementById('progressBar');
-    const progressText = document.getElementById('progressText');
-    
-    if (!progressContainer || !progressBar || !progressText) return;
-    
-    progressContainer.style.display = 'block';
-    progressBar.style.width = `${data.progress}%`;
-    progressText.textContent = data.message;
-    
+    const progressBox = document.getElementById('progressBox');
+    const fill = document.getElementById('progressBoxFill');
+    const step = document.getElementById('progressBoxStep');
+    const percent = document.getElementById('progressBoxPercent');
+
+    if (!progressBox || !fill || !step || !percent) return;
+
+    progressBox.style.display = 'block';
+    fill.style.width = `${data.progress}%`;
+
+    let stepText = data.step || data.message || '--';
+    step.textContent = stepText;
+    percent.textContent = `${data.progress}%`;
+
     if (data.status === 'completed') {
         if (data.new_data_available) {
-            // 清空缓存
             dataCache.clear();
-            
             setTimeout(() => {
                 loadData();
-                progressContainer.style.display = 'none';
+                progressBox.style.display = 'none';
             }, 500);
         } else {
             setTimeout(() => {
-                progressContainer.style.display = 'none';
+                progressBox.style.display = 'none';
             }, 2000);
         }
     } else if (data.status === 'error') {
         setTimeout(() => {
-            progressContainer.style.display = 'none';
+            progressBox.style.display = 'none';
         }, 3000);
     }
 }
 
 async function refreshData() {
     const stockCode = document.getElementById('stockCode').value.trim();
-    
+
     if (!stockCode) {
         showMessage('请先输入股票代码！', 'warning');
         return;
     }
-    
+
     try {
-        const response = await fetch(`/api/v1/stocks/refresh/${stockCode}`, { 
+        const response = await fetch(`/api/v1/stocks/refresh/${stockCode}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             }
         });
-        
+
         const result = await response.json();
         showMessage(result.message, 'info');
-        
+
     } catch (error) {
         console.error('刷新数据失败:', error);
         showMessage('刷新数据失败: ' + error.message, 'error');
-    }
-}
-
-async function loadHistoricalData() {
-    const stockCode = document.getElementById('stockCode').value.trim();
-    
-    if (!stockCode) {
-        showMessage('请先输入股票代码！', 'warning');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/v1/stocks/load-historical/${stockCode}`, { 
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        showMessage(result.message, result.has_existing_data ? 'success' : 'info');
-        
-        // 如果有新数据加载，刷新图表
-        if (result.has_existing_data) {
-            dataCache.clear();
-            setTimeout(() => loadData(), 300);
-        }
-        
-    } catch (error) {
-        console.error('加载历史数据失败:', error);
-        showMessage('加载历史数据失败: ' + error.message, 'error');
     }
 }
 
@@ -208,10 +292,10 @@ function safeFetch(url, options = {}) {
     if (cached && !options.skipCache) {
         return Promise.resolve(cached);
     }
-    
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
+
     return fetch(url, {
         ...options,
         signal: controller.signal
@@ -257,8 +341,8 @@ function showMessage(message, type = 'info') {
         top: 24px;
         right: 24px;
         padding: 16px 24px;
-        background: ${type === 'success' ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.85))' : 
-                    type === 'error' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(239, 68, 68, 0.85))' : 
+        background: ${type === 'success' ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.85))' :
+                    type === 'error' ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(239, 68, 68, 0.85))' :
                     type === 'warning' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(245, 158, 11, 0.85))' :
                     'linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(139, 92, 246, 0.85))'};
         color: white;
@@ -271,7 +355,7 @@ function showMessage(message, type = 'info') {
     `;
     msgDiv.textContent = message;
     document.body.appendChild(msgDiv);
-    
+
     setTimeout(() => {
         msgDiv.style.animation = 'slideOut 0.4s ease';
         setTimeout(() => msgDiv.remove(), 400);
@@ -294,68 +378,168 @@ function calculateMA(dayCount, data) {
     return result;
 }
 
-function initCharts() {
-    const klineDom = document.getElementById('klineChart');
-    if (klineDom) {
-        klineChart = echarts.init(klineDom);
+function initChart() {
+    const dom = document.getElementById('mainChart');
+
+    if (dom) {
+        mainChart = echarts.init(dom);
+
+        const emptyOption = {
+            backgroundColor: 'transparent',
+            animation: false,
+            title: {
+                text: '正在加载数据...',
+                left: 'center',
+                top: 'center',
+                textStyle: {
+                    color: '#94a3b8',
+                    fontSize: 16
+                }
+            },
+            grid: [
+                { left: '10%', right: '8%', top: '10%', height: '55%' },
+                { left: '10%', right: '8%', top: '70%', height: '18%' }
+            ],
+            xAxis: [
+                { type: 'category', data: [] },
+                { type: 'category', gridIndex: 1, data: [] }
+            ],
+            yAxis: [
+                { type: 'value' },
+                { type: 'value', gridIndex: 1 }
+            ],
+            series: []
+        };
+
+        mainChart.setOption(emptyOption);
+
+        mainChart.on('click', (params) => {
+            if (params.componentType === 'series' && params.seriesName === 'K线') {
+                showMarkPopupMenu(params);
+            }
+        });
     }
-    
-    const kdjDom = document.getElementById('kdjChart');
-    if (kdjDom) {
-        kdjChart = echarts.init(kdjDom);
-    }
-    
-    const macdDom = document.getElementById('macdChart');
-    if (macdDom) {
-        macdChart = echarts.init(macdDom);
-    }
-    
+
     window.addEventListener('resize', () => {
-        klineChart && klineChart.resize();
-        kdjChart && kdjChart.resize();
-        macdChart && macdChart.resize();
+        mainChart && mainChart.resize();
     });
+}
+
+function showMarkPopupMenu(params) {
+    const menu = document.getElementById('markPopupMenu');
+    if (!menu) return;
+
+    const dateStr = currentData[params.dataIndex].datetime;
+    const date = new Date(dateStr).toISOString().split('T')[0];
+    markPopupTarget = { index: params.dataIndex, dataIndex: params.dataIndex, date: date };
+
+    const chartRect = document.getElementById('mainChart').getBoundingClientRect();
+    const eventX = params.event?.event?.clientX || chartRect.left + chartRect.width / 2;
+    const eventY = params.event?.event?.clientY || chartRect.top + chartRect.height / 2;
+
+    let left = eventX + 10;
+    let top = eventY - 20;
+
+    if (left + 150 > window.innerWidth) left = eventX - 160;
+    if (top + 120 > window.innerHeight) top = eventY - 120;
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.display = 'flex';
 }
 
 async function loadData() {
     const stockCode = document.getElementById('stockCode').value.trim();
-    
+    const startDateEl = document.getElementById('startDate');
+    const endDateEl = document.getElementById('endDate');
+
+    const startDate = startDateEl ? startDateEl.value : '';
+    const endDate = endDateEl ? endDateEl.value : '';
+
     if (!stockCode) {
-        showMessage('请先输入股票代码！', 'warning');
+        console.log('loadData: No stock code provided, waiting for user input');
         return;
     }
 
     try {
-        let data = await safeFetch(`/api/v1/indicators/${stockCode}`);
-        
+        currentStockCode = stockCode;
+        let url = `/api/v1/indicators/${stockCode}`;
+        const params = new URLSearchParams();
+        if (startDate) params.set('start_date', startDate);
+        if (endDate) params.set('end_date', endDate);
+        if (params.toString()) url += `?${params.toString()}`;
+
+        let response = await safeFetch(url);
+
+        // 处理新返回结构: {data, missing_ranges} 或 旧数组
+        let data, missingRanges = [];
+        if (Array.isArray(response)) {
+            data = response;
+            // 旧接口（无 missing_ranges）保持原行为：空数组才下载
+        } else {
+            data = response.data || [];
+            missingRanges = response.missing_ranges || [];
+        }
+
+        // 关键修复：只要 missingRanges.length > 0 就触发下载，不管 data 是否为空
+        if (missingRanges.length > 0) {
+            const downloadStart = missingRanges[0].start;  // 最早的缺失起点
+            const today = new Date().toISOString().split('T')[0];
+
+            showMessage('检测到数据缺失，后台下载中...', 'info');
+            
+            // 显示进度框
+            const progressBox = document.getElementById('progressBox');
+            const fill = document.getElementById('progressBoxFill');
+            const step = document.getElementById('progressBoxStep');
+            const percent = document.getElementById('progressBoxPercent');
+            if (progressBox && fill && step && percent) {
+                progressBox.style.display = 'block';
+                fill.style.width = '10%';
+                step.textContent = '正在连接数据源...';
+                percent.textContent = '10%';
+            }
+
+            // 启动后台异步下载（从缺失起点到今日）
+            await safeFetch(`/api/v1/stocks/fetch-async/${stockCode}?start_date=${downloadStart}&end_date=${today}`, {
+                method: 'POST',
+                skipCache: true
+            });
+
+            // 显示已有数据（如果有），等待 WebSocket 通知下载完成后再刷新
+            if (data.length > 0) {
+                currentData = data;
+                marks = await loadMarksFromDB(stockCode);
+                updateCharts(data);
+                showMessage(`已显示现有 ${data.length} 条数据，缺失部分后台下载中...`, 'info');
+            } else {
+                // 数据为空，清空图表
+                currentData = [];
+                updateCharts([]);
+                showMessage('数据下载中，请稍候...', 'info');
+            }
+            // handleDownloadProgress 会在 WebSocket 收到 completed 时自动调用 loadData() 刷新
+            return;
+        }
+
+        // 无缺失或旧接口逻辑
         if (!data || data.length === 0) {
             showMessage('正在从真实数据源获取数据，请稍候...', 'info');
-            await safeFetch(`/api/v1/stocks/fetch/${stockCode}`, { 
+            await safeFetch(`/api/v1/stocks/fetch/${stockCode}`, {
                 method: 'POST',
-                skipCache: true 
+                skipCache: true
             });
-            data = await safeFetch(`/api/v1/indicators/${stockCode}`, { skipCache: true });
+            data = await safeFetch(url, { skipCache: true });
+            if (!Array.isArray(data)) data = data.data || [];
         }
-        
+
         if (data && data.length > 0) {
             currentData = data;
+            marks = await loadMarksFromDB(stockCode);
             updateCharts(data);
-            loadSignals(stockCode);
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
         } else {
             showMessage('暂无数据，请确保已安装相关数据源库（akshare）或尝试其他股票', 'warning');
-            const signalsContainer = document.getElementById('signalsContainer');
-            if (signalsContainer) {
-                signalsContainer.innerHTML = `
-                    <div class="empty-state">
-                        <span class="empty-state-icon">📊</span>
-                        <p>该股票暂无数据，请确保后端已安装akshare库，或尝试其他代码</p>
-                        <p style="font-size: 13px; color: #94a3b8; margin-top: 10px;">
-                            提示：在后端运行 <code>pip install akshare</code> 可安装数据源
-                        </p>
-                    </div>
-                `;
-            }
         }
     } catch (error) {
         console.error('加载数据失败:', error);
@@ -363,68 +547,146 @@ async function loadData() {
     }
 }
 
-function updateCharts(data) {
-    if (!data || data.length === 0 || !klineChart) return;
+function getIndicatorSeries(indicatorType, data) {
+    const indicatorConfigs = {
+        macd: {
+            legendData: ['MACD', 'DIF', 'DEA'],
+            series: [
+                {
+                    name: 'MACD',
+                    type: 'bar',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.macd_histogram),
+                    itemStyle: {
+                        color: function(params) {
+                            return params.value >= 0 ? '#ef4444' : '#22c55e';
+                        }
+                    }
+                },
+                {
+                    name: 'DIF',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.macd),
+                    smooth: true,
+                    lineStyle: { width: 1 },
+                    showSymbol: false,
+                    color: '#06b6d4'
+                },
+                {
+                    name: 'DEA',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.macd_signal),
+                    smooth: true,
+                    lineStyle: { width: 1 },
+                    showSymbol: false,
+                    color: '#8b5cf6'
+                }
+            ]
+        },
+        kdj: {
+            legendData: ['K', 'D', 'J'],
+            series: [
+                {
+                    name: 'K',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.kdj_k),
+                    smooth: true,
+                    lineStyle: { width: 1 },
+                    showSymbol: false,
+                    color: '#06b6d4'
+                },
+                {
+                    name: 'D',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.kdj_d),
+                    smooth: true,
+                    lineStyle: { width: 1 },
+                    showSymbol: false,
+                    color: '#8b5cf6'
+                },
+                {
+                    name: 'J',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.map(d => d.kdj_j),
+                    smooth: true,
+                    lineStyle: { width: 1 },
+                    showSymbol: false,
+                    color: '#22c55e'
+                }
+            ]
+        }
+    };
 
-    // API返回的是ASC（旧→新），ECharts从左到右渲染数组，所以直接用即可
+    return indicatorConfigs[indicatorType] || indicatorConfigs.macd;
+}
+
+function updateCharts(data) {
+    if (!data || data.length === 0 || !mainChart) {
+        return;
+    }
+
     const sortedData = data;
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
-    
+
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
-    const closes = sortedData.map(d => d.close_price);
-    
+
     const ma5 = calculateMA(5, sortedData);
     const ma10 = calculateMA(10, sortedData);
     const ma20 = calculateMA(20, sortedData);
 
-    const kdjK = sortedData.map(d => d.kdj_k);
-    const kdjD = sortedData.map(d => d.kdj_d);
-    const kdjJ = sortedData.map(d => d.kdj_j);
-    
-    const macd = sortedData.map(d => d.macd);
-    const macdSignal = sortedData.map(d => d.macd_signal);
-    const macdHistogram = sortedData.map(d => d.macd_histogram);
-    
-    const macdColors = macdHistogram.map(v => v >= 0 ? '#ef4444' : '#22c55e');
+    const indicatorSeries = getIndicatorSeries(currentIndicator, sortedData);
 
-    const klineOption = {
+    const option = {
         backgroundColor: 'transparent',
         animation: false,
         legend: {
             top: 10,
             left: 'center',
-            data: ['K线', 'MA5', 'MA10', 'MA20'],
+            data: ['K线', 'MA5', 'MA10', 'MA20', ...indicatorSeries.legendData],
             textStyle: { color: '#94a3b8' }
         },
         tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'cross' },
+            axisPointer: {
+                type: 'cross',
+                link: [{ xAxisIndex: 'all' }]
+            },
             backgroundColor: 'rgba(15, 23, 42, 0.9)',
             borderColor: 'rgba(255, 255, 255, 0.1)',
             textStyle: { color: '#f8fafc' }
         },
         grid: [
-            { left: '10%', right: '8%', top: '10%', height: '50%' },
-            { left: '10%', right: '8%', top: '70%', height: '16%' }
+            { left: '10%', right: '8%', top: '10%', height: '55%' },
+            { left: '10%', right: '8%', top: '70%', height: '18%' }
         ],
         xAxis: [
             {
                 type: 'category',
                 data: dates,
-                scale: true,
                 boundaryGap: false,
                 axisLine: { lineStyle: { color: '#475569' } },
-                axisLabel: { color: '#94a3b8' }
+                axisLabel: { color: '#94a3b8' },
+                splitLine: { show: false }
             },
             {
                 type: 'category',
                 gridIndex: 1,
                 data: dates,
-                scale: true,
                 boundaryGap: false,
                 axisLine: { lineStyle: { color: '#475569' } },
-                axisLabel: { color: '#94a3b8', show: false },
+                axisLabel: { color: '#94a3b8' },
                 axisTick: { show: false },
                 splitLine: { show: false }
             }
@@ -440,7 +702,7 @@ function updateCharts(data) {
             {
                 scale: true,
                 gridIndex: 1,
-                splitNumber: 2,
+                splitNumber: 3,
                 axisLine: { lineStyle: { color: '#475569' } },
                 axisLabel: { color: '#94a3b8' },
                 axisTick: { show: false },
@@ -478,156 +740,46 @@ function updateCharts(data) {
                         return klines[dataIndex][1] >= klines[dataIndex][0] ? 'rgba(34, 197, 94, 0.6)' : 'rgba(239, 68, 68, 0.6)';
                     }
                 }
-            }
-        ]
-    };
-    
-    klineChart.setOption(klineOption);
-
-    const kdjOption = {
-        backgroundColor: 'transparent',
-        animation: false,
-        legend: {
-            top: 10,
-            left: 'center',
-            data: ['K', 'D', 'J'],
-            textStyle: { color: '#94a3b8' }
-        },
-        tooltip: {
-            trigger: 'axis',
-            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            textStyle: { color: '#f8fafc' }
-        },
-        grid: { left: '10%', right: '8%', top: '15%', bottom: '10%' },
-        xAxis: {
-            type: 'category',
-            data: dates,
-            axisLine: { lineStyle: { color: '#475569' } },
-            axisLabel: { color: '#94a3b8' }
-        },
-        yAxis: {
-            scale: true,
-            splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-            axisLine: { lineStyle: { color: '#475569' } },
-            axisLabel: { color: '#94a3b8' }
-        },
-        dataZoom: [
-            { type: 'inside', start: 0, end: 100 }
-        ],
-        series: [
-            { name: 'K', type: 'line', data: kdjK, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
-            { name: 'D', type: 'line', data: kdjD, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' },
-            { name: 'J', type: 'line', data: kdjJ, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#22c55e' }
-        ]
-    };
-    
-    kdjChart.setOption(kdjOption);
-
-    const macdOption = {
-        backgroundColor: 'transparent',
-        animation: false,
-        legend: {
-            top: 10,
-            left: 'center',
-            data: ['MACD', 'DIF', 'DEA'],
-            textStyle: { color: '#94a3b8' }
-        },
-        tooltip: {
-            trigger: 'axis',
-            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            textStyle: { color: '#f8fafc' }
-        },
-        grid: { left: '10%', right: '8%', top: '15%', bottom: '10%' },
-        xAxis: {
-            type: 'category',
-            data: dates,
-            axisLine: { lineStyle: { color: '#475569' } },
-            axisLabel: { color: '#94a3b8' }
-        },
-        yAxis: {
-            scale: true,
-            splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-            axisLine: { lineStyle: { color: '#475569' } },
-            axisLabel: { color: '#94a3b8' }
-        },
-        dataZoom: [
-            { type: 'inside', start: 0, end: 100 }
-        ],
-        series: [
-            {
-                name: 'MACD',
-                type: 'bar',
-                data: macdHistogram,
-                itemStyle: {
-                    color: function(params) {
-                        return params.value >= 0 ? '#ef4444' : '#22c55e';
-                    }
-                }
             },
-            { name: 'DIF', type: 'line', data: macd, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
-            { name: 'DEA', type: 'line', data: macdSignal, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' }
+            ...indicatorSeries.series
         ]
     };
-    
-    macdChart.setOption(macdOption);
+
+    if (showSignalToggle && marks.size > 0) {
+        const markSeriesData = [];
+        marks.forEach((mark, index) => {
+            if (index < sortedData.length) {
+                const d = sortedData[index];
+                const isBuy = mark.type === 'buy';
+                markSeriesData.push({
+                    name: isBuy ? '买入' : '卖出',
+                    value: [index, isBuy ? d.low_price : d.high_price],
+                    symbol: 'triangle',
+                    symbolSize: 12,
+                    itemStyle: {
+                        color: isBuy ? '#22c55e' : '#ef4444'
+                    },
+                    label: {
+                        show: true,
+                        formatter: isBuy ? '买' : '卖',
+                        position: isBuy ? 'bottom' : 'top',
+                        fontSize: 10,
+                        color: isBuy ? '#22c55e' : '#ef4444',
+                        fontWeight: 'bold'
+                    }
+                });
+            }
+        });
+
+        option.series.push({
+            name: '标记',
+            type: 'scatter',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            data: markSeriesData,
+            zlevel: 3
+        });
+    }
+
+    mainChart.setOption(option, true);
 }
-
-async function loadSignals(stockCode) {
-    try {
-        const result = await safeFetch(`/api/v1/indicators/signals/${stockCode}`);
-        displaySignals(result && result.signals ? result.signals : null);
-    } catch (error) {
-        console.error('加载信号失败:', error);
-        const signalsContainer = document.getElementById('signalsContainer');
-        if (signalsContainer) {
-            signalsContainer.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-state-icon">⚠️</span>
-                    <p>加载信号失败，请刷新重试</p>
-                </div>
-            `;
-        }
-    }
-}
-
-function displaySignals(signals) {
-    const container = document.getElementById('signalsContainer');
-    if (!container) return;
-
-    if (!signals || signals.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <span class="empty-state-icon">📊</span>
-                <p>暂无交易信号，继续观察市场变化</p>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = signals.map(signal => `
-        <div class="signal-card ${signal.type}">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <strong style="font-size: 18px;">${signal.type === 'buy' ? '📈 买入信号' : '📉 卖出信号'}</strong>
-                <span style="color: #94a3b8; font-size: 13px;">${signal.indicator}</span>
-            </div>
-            <p style="font-size: 16px; margin-bottom: 8px;">价格: <strong style="color: ${signal.type === 'buy' ? '#22c55e' : '#ef4444'};">¥${signal.price.toFixed(2)}</strong></p>
-            <p style="color: #94a3b8; font-size: 13px; line-height: 1.6;">${signal.reason}</p>
-            <p style="color: #64748b; font-size: 12px; margin-top: 12px;">${signal.datetime}</p>
-        </div>
-    `).join('');
-}
-
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from { transform: translateX(100px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100px); opacity: 0; }
-    }
-`;
-document.head.appendChild(style);

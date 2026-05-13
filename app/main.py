@@ -20,35 +20,43 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 
+from app.core.logger import logger
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup 事件
+    logger.info("应用启动 - 开始初始化")
     try:
+        logger.info("创建数据库表结构...")
         Base.metadata.create_all(bind=engine)
+        logger.info("数据库表结构创建完成")
     except Exception as e:
-        print(f"⚠️ 创建表结构时出错: {e}")
-        print("  提示: 如果已存在旧数据库，可能需要删除 stock_data.db")
+        logger.error(f"创建表结构时出错: {e}")
+        logger.info("提示: 如果已存在旧数据库，可能需要删除 stock_data.db")
     
-    print(f"项目根目录: {BASE_DIR}")
-    print(f"静态文件目录: {STATIC_DIR}")
+    logger.info(f"项目根目录: {BASE_DIR}")
+    logger.info(f"静态文件目录: {STATIC_DIR}")
     
     # 初始化默认数据 (容错处理)
     try:
+        logger.info("开始初始化默认数据...")
         db = SessionLocal()
         try:
             init_service = InitializationService(db)
             init_service.check_and_initialize_default_data()
+            logger.info("默认数据初始化完成")
         except Exception as e:
-            print(f"⚠️ 初始化数据时出错: {e}")
+            logger.error(f"初始化数据时出错: {e}", exc_info=True)
         finally:
             db.close()
+            logger.info("数据库连接已关闭")
     except Exception as e:
-        print(f"⚠️ 初始化服务异常: {e}")
+        logger.error(f"初始化服务异常: {e}", exc_info=True)
     
-    print("AReran 启动成功")
+    logger.info("AReran 启动成功")
     yield
     # Shutdown 事件
-    print("AReran 关闭")
+    logger.info("AReran 正在关闭...")
 
 
 app = FastAPI(
@@ -62,7 +70,23 @@ app = FastAPI(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # 配置静态文件
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+
+# 添加缓存控制，开发环境下禁用缓存
+from fastapi import Request
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class CacheControlMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+app.add_middleware(CacheControlMiddleware)
 
 
 @app.get("/test")

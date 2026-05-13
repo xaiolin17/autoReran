@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import os
+from app.core.logger import logger
 from app.models.ml_model import MLModel
 from app.schemas.ml import MLModelCreate, TrainingRequest
 from app.services.stock_service import StockService
@@ -55,7 +56,7 @@ class MLService:
                     # 给标记点更高的权重
                     weights[mark.index] = 3.0
             
-            print(f"使用了 {num_marks_used} 个标记点训练")
+            logger.info(f"使用了 {num_marks_used} 个标记点训练")
         
         feature_columns = request.feature_columns or [
             'open_price', 'high_price', 'low_price', 'close_price', 'volume',

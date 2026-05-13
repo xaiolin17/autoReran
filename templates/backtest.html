@@ -26,13 +26,22 @@
                         <input type="text" id="backtestStockCode" value="000001" placeholder="输入股票代码">
                     </div>
                     <div class="form-group">
-                        <label for="strategyName">策略名称</label>
+                        <label for="strategyName">策略类型</label>
                         <select id="strategyName">
-                            <option value="KDJ">KDJ策略</option>
-                            <option value="MACD">MACD策略</option>
-                            <option value="KDJ_MACD">KDJ+MACD策略</option>
-                            <option value="DEFAULT">默认策略</option>
+                            <option value="TRADITIONAL">传统策略</option>
+                            <option value="ML">机器学习策略</option>
                         </select>
+                    </div>
+                    <div class="form-group" id="mlModelGroup" style="display: none;">
+                        <label for="mlModelSelect">选择训练模型</label>
+                        <select id="mlModelSelect">
+                            <option value="">-- 请选择模型 --</option>
+                        </select>
+                    </div>
+                    <div id="noModelsMessage" class="warning-message" style="display: none; padding: 16px; background: rgba(245, 158, 11, 0.1); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.3); margin-bottom: 16px;">
+                        <p style="margin: 0; color: #f59e0b; font-size: 14px;">
+                            ⚠️ 暂无已训练模型，<a href="/training" style="color: #00f0ff; text-decoration: underline;">请先进行模型训练</a>
+                        </p>
                     </div>
                     <div class="form-group">
                         <label for="startDate">开始日期</label>

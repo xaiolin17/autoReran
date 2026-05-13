@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.services.indicator_service import IndicatorService
 from app.services.stock_service import StockService
+from app.core.logger import log_api_call, logger
 
 router = APIRouter()
 
@@ -13,16 +14,64 @@ task_status: Dict[str, Dict] = {}
 
 
 @router.get("/{stock_code}")
+@log_api_call
 def get_stock_data_with_indicators(
     stock_code: str,
     period: str = "1d",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: Optional[int] = 20,  # 默认展示最近1个月数据（约20个交易日）
+    limit: Optional[int] = None,  # 有日期范围时不使用 limit，优先保证日期范围完整
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
+    """
+    获取股票数据及技术指标
+    
+    Args:
+        stock_code: 股票代码
+        period: 时间周期（如 1d, 1h, 1w, 1M）
+        start_date: 开始日期
+        end_date: 结束日期
+        limit: 返回数据条数限制
+        background_tasks: 后台任务管理器
+        db: 数据库会话
+    
+    Returns:
+        Dict: 包含股票数据和缺失范围信息
+    """
+    logger.info(f"获取股票指标数据请求: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
+    
     service = IndicatorService(db)
-    return service.get_stock_data_with_indicators(stock_code, period, start_date, end_date, limit)
+
+    # 日期范围优先：有日期范围时不限制条数，确保缺失检测能正确执行
+    if start_date or end_date:
+        limit = None
+        logger.debug(f"有日期范围参数，取消limit限制")
+
+    result = service.get_stock_data_with_indicators(stock_code, period, start_date, end_date, limit)
+    # result: {"data": [...], "missing_ranges": [...]}
+    
+    logger.info(f"查询结果: 数据条数={len(result.get('data', []))}, 缺失范围数量={len(result.get('missing_ranges', []))}")
+    
+    # 如果有缺失范围，启动后台下载任务
+    if result.get("missing_ranges") and background_tasks:
+        task_id = f"{stock_code}_{period}_{datetime.now().timestamp()}_{len(result['missing_ranges'])}"
+        task_status[task_id] = {
+            "status": "starting",
+            "progress": 0,
+            "message": f"检测到{len(result['missing_ranges'])}个缺失数据范围，开始下载..."
+        }
+        
+        logger.info(f"启动后台下载任务: task_id={task_id}, 缺失范围={result['missing_ranges']}")
+        
+        # 启动后台下载任务
+        background_tasks.add_task(_download_missing_ranges_task, stock_code, period, result["missing_ranges"], task_id)
+        
+        # 添加任务ID到响应
+        result["download_task_id"] = task_id
+    
+    logger.info(f"股票指标数据请求完成: stock_code={stock_code}")
+    return result
 
 
 @router.get("/{stock_code}/recent")
@@ -291,6 +340,217 @@ def _download_task(stock_code: str, period: str, task_id: str, incremental: bool
         db_local.close()
 
 
+def _download_missing_ranges_task(stock_code: str, period: str, missing_ranges: List[Dict], task_id: str):
+    """后台下载缺失数据范围的任务"""
+    from app.core.database import SessionLocal
+    from app.services.stock_service import StockService
+    from app.services.indicator_service import IndicatorService
+    from app.core.websocket_manager import manager
+    import asyncio
+    
+    logger.info(f"开始执行后台下载任务: task_id={task_id}, stock_code={stock_code}, period={period}, missing_ranges_count={len(missing_ranges)}")
+    
+    db_local = SessionLocal()
+    
+    try:
+        stock_service = StockService(db_local)
+        indicator_service = IndicatorService(db_local)
+        
+        total_ranges = len(missing_ranges)
+        logger.info(f"总共需要下载 {total_ranges} 个数据范围")
+        
+        for i, missing_range in enumerate(missing_ranges):
+            logger.info(f"开始下载数据范围 {i + 1}/{total_ranges}: {missing_range['start']} 到 {missing_range['end']}")
+            progress = int(10 + (i / total_ranges) * 80)
+            task_status[task_id] = {
+                "status": "downloading",
+                "progress": progress,
+                "message": f"正在下载缺失数据范围 ({i + 1}/{total_ranges}): {missing_range['start']} 到 {missing_range['end']}"
+            }
+            
+            # 发送WebSocket通知
+            def _send_websocket_notification():
+                async def _broadcast():
+                    logger.debug(f"发送WebSocket进度通知: task_id={task_id}, progress={progress}")
+                    await manager.broadcast({
+                        "type": "download_progress",
+                        "data": {
+                            "stock_code": stock_code,
+                            "task_id": task_id,
+                            "progress": progress,
+                            "step": f"正在下载数据范围 ({i + 1}/{total_ranges}): {missing_range['start']} 到 {missing_range['end']}",
+                            "message": f"正在下载缺失数据范围 ({i + 1}/{total_ranges}): {missing_range['start']} 到 {missing_range['end']}",
+                            "status": "downloading",
+                            "new_data_available": False
+                        }
+                    }, "realtime")
+                
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(_broadcast())
+                finally:
+                    loop.close()
+            
+            _send_websocket_notification()
+            
+            try:
+                # 下载缺失范围的数据
+                logger.debug(f"调用fetch_and_save_stock_data: stock_code={stock_code}, period={period}, start_date={missing_range['start']}, end_date={missing_range['end']}")
+                saved = stock_service.fetch_and_save_stock_data(
+                    stock_code=stock_code,
+                    period=period,
+                    start_date=datetime.strptime(missing_range["start"], "%Y-%m-%d").strftime("%Y%m%d"),
+                    end_date=datetime.strptime(missing_range["end"], "%Y-%m-%d").strftime("%Y%m%d")
+                )
+                
+                logger.info(f"数据范围 {i + 1}/{total_ranges} 下载完成: {len(saved)} 条数据")
+                
+                # 计算新下载数据的技术指标
+                logger.debug(f"开始计算技术指标: stock_code={stock_code}, period={period}, start_date={missing_range['start']}, end_date={missing_range['end']}")
+                indicator_service.get_stock_data_with_indicators(
+                    stock_code=stock_code,
+                    period=period,
+                    start_date=missing_range["start"],
+                    end_date=missing_range["end"]
+                )
+                
+            except Exception as e:
+                logger.error(f"下载数据范围 {missing_range} 时出错: {e}", exc_info=True)
+                continue
+        
+        logger.info(f"所有数据范围下载完成: task_id={task_id}, 总计 {total_ranges} 个范围")
+        task_status[task_id] = {
+            "status": "completed",
+            "progress": 100,
+            "message": f"{total_ranges}个缺失数据范围下载完成",
+            "new_data_available": True
+        }
+        
+        # 发送完成通知
+        def _send_completion_notification():
+            async def _broadcast():
+                logger.info(f"发送下载完成WebSocket通知: task_id={task_id}")
+                await manager.broadcast({
+                    "type": "download_progress",
+                    "data": {
+                        "stock_code": stock_code,
+                        "task_id": task_id,
+                        "progress": 100,
+                        "step": f"{total_ranges}个缺失数据范围下载完成",
+                        "message": f"{total_ranges}个缺失数据范围下载完成",
+                        "status": "completed",
+                        "new_data_available": True
+                    }
+                }, "realtime")
+            
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_broadcast())
+            finally:
+                loop.close()
+        
+        _send_completion_notification()
+        
+    except Exception as e:
+        logger.error(f"后台下载任务执行失败: task_id={task_id}, error={e}", exc_info=True)
+        task_status[task_id] = {
+            "status": "error",
+            "progress": 0,
+            "message": f"下载失败: {str(e)}"
+        }
+        
+        # 发送错误通知
+        def _send_error_notification():
+            async def _broadcast():
+                logger.info(f"发送下载错误WebSocket通知: task_id={task_id}")
+                await manager.broadcast({
+                    "type": "download_progress",
+                    "data": {
+                        "stock_code": stock_code,
+                        "task_id": task_id,
+                        "progress": 0,
+                        "step": f"下载失败: {str(e)}",
+                        "message": f"下载失败: {str(e)}",
+                        "status": "error",
+                        "new_data_available": False
+                    }
+                }, "realtime")
+            
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_broadcast())
+            finally:
+                loop.close()
+        
+        _send_error_notification()
+        
+    finally:
+        db_local.close()
+        logger.info(f"后台下载任务完成并关闭数据库连接: task_id={task_id}")
+
+
+def _download_missing_ranges_task(stock_code: str, period: str, missing_ranges: List[Dict], task_id: str):
+    """后台下载缺失数据范围的任务"""
+    from app.core.database import SessionLocal
+    from app.services.stock_service import StockService
+    
+    db_local = SessionLocal()
+    
+    try:
+        stock_service = StockService(db_local)
+        indicator_service = IndicatorService(db_local)
+        
+        total_ranges = len(missing_ranges)
+        
+        for i, missing_range in enumerate(missing_ranges):
+            progress = int(10 + (i / total_ranges) * 80)
+            task_status[task_id] = {
+                "status": "downloading",
+                "progress": progress,
+                "message": f"正在下载缺失数据范围 ({i + 1}/{total_ranges}): {missing_range['start']} 到 {missing_range['end']}"
+            }
+            
+            try:
+                # 下载缺失范围的数据
+                saved = stock_service.fetch_and_save_stock_data(
+                    stock_code=stock_code,
+                    period=period,
+                    start_date=datetime.strptime(missing_range["start"], "%Y-%m-%d").strftime("%Y%m%d"),
+                    end_date=datetime.strptime(missing_range["end"], "%Y-%m-%d").strftime("%Y%m%d")
+                )
+                
+                # 计算新下载数据的技术指标
+                indicator_service.get_stock_data_with_indicators(
+                    stock_code=stock_code,
+                    period=period,
+                    start_date=missing_range["start"],
+                    end_date=missing_range["end"]
+                )
+                
+            except Exception as e:
+                logger.error(f"下载数据范围 {missing_range} 时出错: {e}", exc_info=True)
+                continue
+        
+        task_status[task_id] = {
+            "status": "completed",
+            "progress": 100,
+            "message": f"{total_ranges}个缺失数据范围下载完成",
+            "new_data_available": True
+        }
+        
+    except Exception as e:
+        task_status[task_id] = {
+            "status": "error",
+            "progress": 0,
+            "message": f"下载失败: {str(e)}"
+        }
+    finally:
+        db_local.close()
+
+
 def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool):
     """后台下载所有周期数据任务"""
     from app.core.database import SessionLocal
@@ -326,7 +586,7 @@ def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool)
                 indicator_service.get_stock_data_with_indicators(stock_code, period)
                 
             except Exception as e:
-                print(f"下载{period}周期数据时出错: {e}")
+                logger.error(f"下载{period}周期数据时出错: {e}", exc_info=True)
                 continue
         
         task_status[task_id] = {

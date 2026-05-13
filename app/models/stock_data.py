@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -21,6 +21,9 @@ class StockData(Base):
     pe = Column(Float)
     pb = Column(Float)
     source = Column(String(50))
+
+    # 用户标记（用于模型训练标签）
+    label = Column(String(20), default=None)  # NULL / 买入 / 卖出
 
     # 技术指标
     ma5 = Column(Float)
@@ -54,3 +57,15 @@ class StockData(Base):
 
     def __repr__(self):
         return f"<StockData {self.stock_code} {self.datetime}>"
+
+
+class StockCode(Base):
+    __tablename__ = "stock_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(20), unique=True, index=True, nullable=False)
+    name = Column(String(100))
+    updated_at = Column(DateTime, nullable=False)
+
+    def __repr__(self):
+        return f"<StockCode {self.code} {self.name}>"

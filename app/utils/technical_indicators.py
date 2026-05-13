@@ -1,12 +1,16 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Tuple
+from app.core.logger import logger
 
 
 class TechnicalIndicators:
     @staticmethod
     def calculate_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.DataFrame:
+        logger.debug(f"开始计算KDJ指标: 数据条数={len(df)}, 参数n={n}, m1={m1}, m2={m2}")
+        
         if df.empty:
+            logger.warning("输入数据为空，返回带有NaN值的KDJ列")
             df['kdj_k'] = np.nan
             df['kdj_d'] = np.nan
             df['kdj_j'] = np.nan
@@ -24,6 +28,7 @@ class TechnicalIndicators:
         df['kdj_d'] = df['kdj_k'].ewm(com=m2-1, adjust=False).mean()
         df['kdj_j'] = 3 * df['kdj_k'] - 2 * df['kdj_d']
         
+        logger.debug(f"KDJ指标计算完成")
         return df
     
     @staticmethod
@@ -96,16 +101,25 @@ class TechnicalIndicators:
     
     @staticmethod
     def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
+        logger.info(f"开始计算所有技术指标: 数据条数={len(df)}")
+        
         if df.empty:
+            logger.warning("输入数据为空，直接返回")
             return df
         
         df = df.copy()
+        logger.debug("开始计算KDJ指标")
         df = TechnicalIndicators.calculate_kdj(df)
+        logger.debug("开始计算MACD指标")
         df = TechnicalIndicators.calculate_macd(df)
+        logger.debug("开始计算RSI指标")
         df = TechnicalIndicators.calculate_rsi(df)
+        logger.debug("开始计算布林带指标")
         df = TechnicalIndicators.calculate_bollinger_bands(df)
+        logger.debug("开始计算移动平均线指标")
         df = TechnicalIndicators.calculate_ma(df)
         
+        logger.info(f"所有技术指标计算完成")
         return df
     
     @staticmethod

@@ -4,6 +4,7 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.schemas.ml import MLModel, TrainingRequest
 from app.services.ml_service import MLService
+from app.models.stock_data import StockData
 
 router = APIRouter()
 
@@ -68,6 +69,23 @@ def get_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
     return model
+
+
+@router.get("/check-labeled-data")
+def check_labeled_data(
+    stock_code: str,
+    db: Session = Depends(get_db)
+):
+    """检查指定股票是否有已标记的买入/卖出数据"""
+    count = db.query(StockData).filter(
+        StockData.stock_code == stock_code,
+        StockData.label.isnot(None)
+    ).count()
+    return {
+        "stock_code": stock_code,
+        "has_labeled_data": count > 0,
+        "labeled_count": count
+    }
 
 
 @router.delete("/models/{model_id}")

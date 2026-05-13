@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadBacktests();
+    loadMLModels();
     setupEventListeners();
     setDefaultDates();
 });
@@ -34,6 +35,50 @@ function showMessage(message, type = 'info') {
 
 function setupEventListeners() {
     document.getElementById('backtestForm').addEventListener('submit', runBacktest);
+    document.getElementById('strategyName').addEventListener('change', handleStrategyTypeChange);
+}
+
+function handleStrategyTypeChange() {
+    const strategyType = document.getElementById('strategyName').value;
+    const mlModelGroup = document.getElementById('mlModelGroup');
+    const noModelsMessage = document.getElementById('noModelsMessage');
+    
+    if (strategyType === 'ML') {
+        mlModelGroup.style.display = 'block';
+    } else {
+        mlModelGroup.style.display = 'none';
+        noModelsMessage.style.display = 'none';
+    }
+}
+
+async function loadMLModels() {
+    try {
+        const response = await fetch('/api/v1/ml/models');
+        const models = await response.json();
+        updateMLModelSelect(models);
+    } catch (error) {
+        console.error('加载模型失败:', error);
+    }
+}
+
+function updateMLModelSelect(models) {
+    const select = document.getElementById('mlModelSelect');
+    const noModelsMessage = document.getElementById('noModelsMessage');
+    
+    select.innerHTML = '<option value="">-- 请选择模型 --</option>';
+    
+    if (!models || models.length === 0) {
+        const strategyType = document.getElementById('strategyName').value;
+        if (strategyType === 'ML') {
+            noModelsMessage.style.display = 'block';
+        }
+        return;
+    }
+    
+    noModelsMessage.style.display = 'none';
+    models.forEach(model => {
+        select.innerHTML += `<option value="${model.id}">${model.model_name} (${model.stock_code})</option>`;
+    });
 }
 
 function setDefaultDates() {
