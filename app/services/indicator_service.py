@@ -166,11 +166,7 @@ class IndicatorService:
                 break
         
         if not has_missing_indicators:
-            result = self._format_result(stock_data_list)
-            from app.core.logger import logger
-            if result:
-                logger.info(f"DEBUG - 返回数据顺序: 第一条={result[0]['datetime']}, 最后一条={result[-1]['datetime']}, 共{len(result)}条")
-            return result
+            return self._format_result(stock_data_list)
         
         from app.core.logger import logger
         logger.info(f"检测到缺失指标，开始计算: {stock_code} {period}")
@@ -180,11 +176,7 @@ class IndicatorService:
         if auto_save:
             self._save_indicators_to_database(stock_data_list, df)
         
-        result = self._format_result_with_calculated_indicators(stock_data_list, df)
-        from app.core.logger import logger
-        if result:
-            logger.info(f"DEBUG - 计算后返回数据顺序: 第一条={result[0]['datetime']}, 最后一条={result[-1]['datetime']}, 共{len(result)}条")
-        return result
+        return self._format_result_with_calculated_indicators(stock_data_list, df)
     
     def calculate_and_save_indicators(self, stock_code: str, period: str = "1d"):
         from app.models.stock_data import StockData

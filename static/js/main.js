@@ -360,18 +360,9 @@ async function loadData() {
 function updateCharts(data) {
     if (!data || data.length === 0 || !klineChart) return;
 
-    console.log('DEBUG - API返回数据条数:', data.length);
-    console.log('DEBUG - 第一条数据datetime:', data[0]?.datetime);
-    console.log('DEBUG - 最后一条数据datetime:', data[data.length-1]?.datetime);
-    
     // API返回的是ASC（旧→新），ECharts从左到右渲染数组，所以直接用即可
     const sortedData = data;
-    console.log('DEBUG - sortedData第一条:', sortedData[0]?.datetime);
-    console.log('DEBUG - sortedData最后一条:', sortedData[sortedData.length-1]?.datetime);
-    
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
-    console.log('DEBUG - dates数组第一个:', dates[0]);
-    console.log('DEBUG - dates数组最后一个:', dates[dates.length-1]);
     
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
@@ -485,14 +476,7 @@ function updateCharts(data) {
         ]
     };
     
-    console.log('DEBUG - 即将设置klineChart option，dates前3个:', dates.slice(0, 3));
-    console.log('DEBUG - 即将设置klineChart option，dates后3个:', dates.slice(-3));
     klineChart.setOption(klineOption);
-    
-    // 验证ECharts实际使用的数据
-    const optionAfter = klineChart.getOption();
-    console.log('DEBUG - ECharts xAxis.data前3个:', optionAfter.xAxis[0].data.slice(0, 3));
-    console.log('DEBUG - ECharts xAxis.data后3个:', optionAfter.xAxis[0].data.slice(-3));
 
     const kdjOption = {
         backgroundColor: 'transparent',
