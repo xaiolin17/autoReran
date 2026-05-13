@@ -150,7 +150,7 @@ class IndicatorService:
         )
         
         if limit:
-            query = query.order_by(desc(StockData.datetime)).limit(limit)
+            query = query.order_by(StockData.datetime).limit(limit)
         else:
             query = query.order_by(StockData.datetime)
         

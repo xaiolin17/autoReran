@@ -34,7 +34,7 @@ class StockService:
         if end_date:
             query = query.filter(StockData.datetime <= end_date)
         
-        query = query.order_by(desc(StockData.datetime))
+        query = query.order_by(StockData.datetime)
         
         if limit:
             query = query.limit(limit)
