@@ -67,13 +67,24 @@ def refresh_stock_data(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
-    # First check if we have existing data
+    from datetime import timedelta
+    
     service = StockService(db)
     latest_date = service.get_latest_date(stock_code, period)
-    message = f"发现现有数据，从 {latest_date.date()} 开始增量更新" if latest_date else f"没有现有数据，将下载完整数据"
     
-    # Add sync background task
-    background_tasks.add_task(run_refresh_task, stock_code, period)
+    start_date_str = None
+    if latest_date:
+        latest_date_only = latest_date.date()
+        today = datetime.now().date()
+        if latest_date_only >= today:
+            message = f"已有数据已是最新 (截止 {latest_date_only})，无需更新"
+        else:
+            start_date_str = (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
+            message = f"发现现有数据，从 {start_date_str} 开始增量更新"
+    else:
+        message = f"没有现有数据，将下载完整数据"
+    
+    background_tasks.add_task(run_refresh_task, stock_code, period, start_date_str)
     
     return {
         "message": message,
@@ -90,13 +101,19 @@ def load_historical_data(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
-    # First check if we have existing data
+    from datetime import timedelta
+    
     service = StockService(db)
     earliest_date = service.get_earliest_date(stock_code, period)
-    message = f"发现现有数据，截至 {earliest_date.date()} 之前获取历史数据" if earliest_date else f"没有现有数据，将下载完整历史数据"
     
-    # Add sync background task
-    background_tasks.add_task(run_load_historical_task, stock_code, period)
+    historical_end_date_str = None
+    if earliest_date:
+        historical_end_date_str = (earliest_date - timedelta(days=1)).strftime("%Y%m%d")
+        message = f"发现现有数据，截至 {historical_end_date_str} 之前获取历史数据"
+    else:
+        message = f"没有现有数据，将下载完整历史数据"
+    
+    background_tasks.add_task(run_load_historical_task, stock_code, period, historical_end_date_str)
     
     return {
         "message": message,
@@ -106,7 +123,7 @@ def load_historical_data(
     }
 
 
-def run_load_historical_task(stock_code: str, period: str = "1d"):
+def run_load_historical_task(stock_code: str, period: str = "1d", historical_end_date: Optional[str] = None):
     import asyncio
     from app.core.database import SessionLocal
     
@@ -126,7 +143,9 @@ def run_load_historical_task(stock_code: str, period: str = "1d"):
                 }
             }, channel="realtime")
             
-            saved_data = service.fetch_and_save_stock_data(stock_code, period, historical=True)
+            saved_data = service.fetch_and_save_stock_data(
+                stock_code, period, historical=True
+            )
             
             if saved_data:
                 await manager.broadcast({
@@ -176,7 +195,6 @@ def run_load_historical_task(stock_code: str, period: str = "1d"):
         finally:
             db.close()
     
-    # Run async task in a new event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -185,7 +203,7 @@ def run_load_historical_task(stock_code: str, period: str = "1d"):
         loop.close()
 
 
-def run_refresh_task(stock_code: str, period: str = "1d"):
+def run_refresh_task(stock_code: str, period: str = "1d", start_date: Optional[str] = None):
     import asyncio
     from app.core.database import SessionLocal
     
@@ -205,7 +223,9 @@ def run_refresh_task(stock_code: str, period: str = "1d"):
                 }
             }, channel="realtime")
             
-            saved_data = service.fetch_and_save_stock_data(stock_code, period, incremental=True)
+            saved_data = service.fetch_and_save_stock_data(
+                stock_code, period, start_date=start_date, incremental=True
+            )
             
             if saved_data:
                 await manager.broadcast({
@@ -255,7 +275,6 @@ def run_refresh_task(stock_code: str, period: str = "1d"):
         finally:
             db.close()
     
-    # Run async task in a new event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
