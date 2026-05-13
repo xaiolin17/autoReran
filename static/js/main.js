@@ -371,8 +371,8 @@ function updateCharts(data) {
     const kdjD = sortedData.map(d => d.kdj_d);
     const kdjJ = sortedData.map(d => d.kdj_j);
     
-    const macdDiff = sortedData.map(d => d.macd_dif);
-    const macdDea = sortedData.map(d => d.macd_dea);
+    const macd = sortedData.map(d => d.macd);
+    const macdSignal = sortedData.map(d => d.macd_signal);
     const macdHistogram = sortedData.map(d => d.macd_histogram);
     
     const macdColors = macdHistogram.map(v => v >= 0 ? '#ef4444' : '#22c55e');
@@ -559,8 +559,8 @@ function updateCharts(data) {
                     }
                 }
             },
-            { name: 'DIF', type: 'line', data: macdDiff, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
-            { name: 'DEA', type: 'line', data: macdDea, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' }
+            { name: 'DIF', type: 'line', data: macd, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#06b6d4' },
+            { name: 'DEA', type: 'line', data: macdSignal, smooth: true, lineStyle: { width: 1 }, showSymbol: false, color: '#8b5cf6' }
         ]
     };
     
