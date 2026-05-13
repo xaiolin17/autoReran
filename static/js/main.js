@@ -486,7 +486,14 @@ function updateCharts(data) {
         ]
     };
     
+    console.log('DEBUG - 即将设置klineChart option，dates前3个:', dates.slice(0, 3));
+    console.log('DEBUG - 即将设置klineChart option，dates后3个:', dates.slice(-3));
     klineChart.setOption(klineOption);
+    
+    // 验证ECharts实际使用的数据
+    const optionAfter = klineChart.getOption();
+    console.log('DEBUG - ECharts xAxis.data前3个:', optionAfter.xAxis[0].data.slice(0, 3));
+    console.log('DEBUG - ECharts xAxis.data后3个:', optionAfter.xAxis[0].data.slice(-3));
 
     const kdjOption = {
         backgroundColor: 'transparent',
