@@ -18,8 +18,8 @@ class AkshareCrawler(BaseCrawler):
     
     def __init__(self):
         self.available = AKSHARE_AVAILABLE
-        self.max_retries = 3
-        self.retry_delay = 2  # seconds
+        self.max_retries = 5
+        self.retry_delay = 3  # seconds
     
     def _retry_fetch(self, fetch_func, *args, **kwargs):
         """Retry helper with exponential backoff"""
@@ -101,39 +101,40 @@ class AkshareCrawler(BaseCrawler):
             # 提取纯数字代码，去除 sh/sz 前缀
             code = index_code[2:] if len(index_code) > 2 else index_code
             
-            # 根据周期选择不同的 API
-            if period == "1d":
-                df = self._retry_fetch(
-                    ak.index_zh_a_hist,
-                    symbol=code, 
-                    period="daily", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            elif period == "1w":
-                df = self._retry_fetch(
-                    ak.index_zh_a_hist,
-                    symbol=code, 
-                    period="weekly", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            elif period == "1M":
-                df = self._retry_fetch(
-                    ak.index_zh_a_hist,
-                    symbol=code, 
-                    period="monthly", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            else:
-                df = self._retry_fetch(
-                    ak.index_zh_a_hist_min_em,
-                    symbol=index_code, 
-                    period="60", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
+            # 备用方法列表
+            def fetch_method_1():
+                if period == "1d":
+                    return ak.index_zh_a_hist(symbol=code, period="daily", start_date=start_date, end_date=end_date)
+                elif period == "1w":
+                    return ak.index_zh_a_hist(symbol=code, period="weekly", start_date=start_date, end_date=end_date)
+                elif period == "1M":
+                    return ak.index_zh_a_hist(symbol=code, period="monthly", start_date=start_date, end_date=end_date)
+                else:
+                    return ak.index_zh_a_hist_min_em(symbol=index_code, period="60", start_date=start_date, end_date=end_date)
+            
+            def fetch_method_2():
+                if period == "1d":
+                    return ak.index_zh_a_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date)
+                elif period == "1w":
+                    return ak.index_zh_a_hist_em(symbol=code, period="weekly", start_date=start_date, end_date=end_date)
+                elif period == "1M":
+                    return ak.index_zh_a_hist_em(symbol=code, period="monthly", start_date=start_date, end_date=end_date)
+                else:
+                    return ak.index_zh_a_hist_min_em(symbol=index_code, period="60", start_date=start_date, end_date=end_date)
+            
+            # 尝试多个备用 API
+            fetch_functions = [fetch_method_1, fetch_method_2]
+            df = None
+            
+            for i, fetch_func in enumerate(fetch_functions):
+                try:
+                    logger.info(f"尝试第 {i+1} 种 API 方法")
+                    df = self._retry_fetch(fetch_func)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    logger.warning(f"第 {i+1} 种方法失败: {e}")
+                    continue
             
             if df is None or df.empty:
                 logger.warning(f"AkShare 返回空数据: index={index_code}, period={period}")
@@ -191,39 +192,40 @@ class AkshareCrawler(BaseCrawler):
             else:
                 symbol = f"sz{stock_code}"
             
-            # 根据周期选择不同的 API
-            if period == "1d":
-                df = self._retry_fetch(
-                    ak.stock_zh_a_hist,
-                    symbol=stock_code, 
-                    period="daily", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            elif period == "1w":
-                df = self._retry_fetch(
-                    ak.stock_zh_a_hist,
-                    symbol=stock_code, 
-                    period="weekly", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            elif period == "1M":
-                df = self._retry_fetch(
-                    ak.stock_zh_a_hist,
-                    symbol=stock_code, 
-                    period="monthly", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
-            else:
-                df = self._retry_fetch(
-                    ak.stock_zh_a_hist_min_em,
-                    symbol=symbol, 
-                    period="60", 
-                    start_date=start_date, 
-                    end_date=end_date
-                )
+            # 备用方法列表
+            def fetch_method_1():
+                if period == "1d":
+                    return ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
+                elif period == "1w":
+                    return ak.stock_zh_a_hist(symbol=stock_code, period="weekly", start_date=start_date, end_date=end_date)
+                elif period == "1M":
+                    return ak.stock_zh_a_hist(symbol=stock_code, period="monthly", start_date=start_date, end_date=end_date)
+                else:
+                    return ak.stock_zh_a_hist_min_em(symbol=symbol, period="60", start_date=start_date, end_date=end_date)
+            
+            def fetch_method_2():
+                if period == "1d":
+                    return ak.stock_zh_a_hist_em(symbol=stock_code, period="daily", start_date=start_date, end_date=end_date)
+                elif period == "1w":
+                    return ak.stock_zh_a_hist_em(symbol=stock_code, period="weekly", start_date=start_date, end_date=end_date)
+                elif period == "1M":
+                    return ak.stock_zh_a_hist_em(symbol=stock_code, period="monthly", start_date=start_date, end_date=end_date)
+                else:
+                    return ak.stock_zh_a_hist_min_em(symbol=symbol, period="60", start_date=start_date, end_date=end_date)
+            
+            # 尝试多个备用 API
+            fetch_functions = [fetch_method_1, fetch_method_2]
+            df = None
+            
+            for i, fetch_func in enumerate(fetch_functions):
+                try:
+                    logger.info(f"尝试第 {i+1} 种 API 方法")
+                    df = self._retry_fetch(fetch_func)
+                    if df is not None and not df.empty:
+                        break
+                except Exception as e:
+                    logger.warning(f"第 {i+1} 种方法失败: {e}")
+                    continue
             
             if df is None or df.empty:
                 logger.warning(f"AkShare 返回空数据: stock={stock_code}, period={period}")
