@@ -127,6 +127,9 @@ function handleDownloadProgress(data) {
     
     if (data.status === 'completed') {
         if (data.new_data_available) {
+            // 清空缓存
+            dataCache.clear();
+            
             setTimeout(() => {
                 loadData();
                 progressContainer.style.display = 'none';
@@ -357,7 +360,9 @@ async function loadData() {
 function updateCharts(data) {
     if (!data || data.length === 0 || !klineChart) return;
 
-    const sortedData = [...data].reverse();
+    // 后端返回的数据是 datetime ASC（从旧到新），直接用即可
+    // 从左到右：旧 → 新
+    const sortedData = data;
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
