@@ -360,19 +360,19 @@ async function loadData() {
 function updateCharts(data) {
     if (!data || data.length === 0 || !klineChart) return;
 
-    // 调试：打印数据顺序
     console.log('DEBUG - API返回数据条数:', data.length);
     console.log('DEBUG - 第一条数据datetime:', data[0]?.datetime);
     console.log('DEBUG - 最后一条数据datetime:', data[data.length-1]?.datetime);
     
-    // 后端返回的数据是 datetime ASC（从旧到新），直接用即可
-    // 从左到右：旧 → 新
-    const sortedData = data;
+    // 关键修复：API返回的是ASC（旧→新），但ECharts显示反了
+    // 所以我们需要手动反转数据，确保图表从左到右显示旧→新
+    const sortedData = [...data].reverse();
+    console.log('DEBUG - 反转后第一条:', sortedData[0]?.datetime);
+    console.log('DEBUG - 反转后最后一条:', sortedData[sortedData.length-1]?.datetime);
+    
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
     console.log('DEBUG - dates数组第一个:', dates[0]);
     console.log('DEBUG - dates数组最后一个:', dates[dates.length-1]);
-    console.log('DEBUG - dates数组前3个:', dates.slice(0, 3));
-    console.log('DEBUG - dates数组后3个:', dates.slice(-3));
     
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
