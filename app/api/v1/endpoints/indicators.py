@@ -18,7 +18,7 @@ def get_stock_data_with_indicators(
     period: str = "1d",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: Optional[int] = None,
+    limit: Optional[int] = 20,  # 默认展示最近1个月数据（约20个交易日）
     db: Session = Depends(get_db)
 ):
     service = IndicatorService(db)

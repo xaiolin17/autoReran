@@ -150,11 +150,13 @@ class IndicatorService:
         )
         
         if limit:
-            query = query.order_by(StockData.datetime).limit(limit)
+            # 先按DESC排序获取最近的N条，然后反转为ASC顺序
+            query = query.order_by(desc(StockData.datetime)).limit(limit)
+            stock_data_list = query.all()
+            stock_data_list = stock_data_list[::-1]  # 反转为ASC
         else:
             query = query.order_by(StockData.datetime)
-        
-        stock_data_list = query.all()
+            stock_data_list = query.all()
         
         if not stock_data_list:
             return []
