@@ -371,6 +371,9 @@ function updateCharts(data) {
     const dates = sortedData.map(d => new Date(d.datetime).toLocaleDateString('zh-CN'));
     console.log('DEBUG - dates数组第一个:', dates[0]);
     console.log('DEBUG - dates数组最后一个:', dates[dates.length-1]);
+    console.log('DEBUG - dates数组前3个:', dates.slice(0, 3));
+    console.log('DEBUG - dates数组后3个:', dates.slice(-3));
+    
     const klines = sortedData.map(d => [d.open_price, d.close_price, d.low_price, d.high_price]);
     const volumes = sortedData.map(d => [d.volume]);
     const closes = sortedData.map(d => d.close_price);
