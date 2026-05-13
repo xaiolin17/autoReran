@@ -115,8 +115,14 @@ class AkshareCrawler(BaseCrawler):
             logger.info(f"获取数据: {clean_code} {period} [{processed_start} ~ {processed_end}]")
             
             # 处理指数
-            if clean_code == "000001" or clean_code == "399001":
-                index_code = f"sh{clean_code}" if clean_code == "000001" else f"sz{clean_code}"
+            if clean_code == "000001":
+                index_code = "sh000001"
+            elif clean_code == "399001":
+                index_code = "sz399001"
+            else:
+                index_code = None
+            
+            if index_code:
                 return self._fetch_index_data(
                     index_code=index_code,
                     period=period,
@@ -206,7 +212,7 @@ class AkshareCrawler(BaseCrawler):
                     'volume': float(row.get('成交量', row.get('volume', 0))),
                     'amount': float(row.get('成交额', row.get('amount', 0))),
                     'stock_code': index_code[2:] if len(index_code) > 2 else index_code,
-                    'stock_name': '上证指数' if index_code == 'sh000001' else '深证成指',
+                    'stock_name': '上证指数' if code == '000001' else ('深证成指' if code == '399001' else index_code),
                     'period': period,
                     'source': 'akshare'
                 })
