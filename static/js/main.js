@@ -416,9 +416,7 @@ function updateCharts(data) {
                 scale: true,
                 boundaryGap: false,
                 axisLine: { lineStyle: { color: '#475569' } },
-                axisLabel: { color: '#94a3b8' },
-                min: 'dataMin',
-                max: 'dataMax'
+                axisLabel: { color: '#94a3b8' }
             },
             {
                 type: 'category',
@@ -429,9 +427,7 @@ function updateCharts(data) {
                 axisLine: { lineStyle: { color: '#475569' } },
                 axisLabel: { color: '#94a3b8', show: false },
                 axisTick: { show: false },
-                splitLine: { show: false },
-                min: 'dataMin',
-                max: 'dataMax'
+                splitLine: { show: false }
             }
         ],
         yAxis: [
