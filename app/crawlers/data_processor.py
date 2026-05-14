@@ -5,8 +5,39 @@ import numpy as np
 
 
 class DataProcessor:
+    """
+    股票数据处理工具类
+
+    职责:
+        提供股票数据的合并、聚合、清洗、重采样等通用数据处理能力。
+        所有方法均为静态方法，无需实例化即可调用。
+
+    被调用方:
+        - StockService: 在数据获取后调用merge_data/average_data合并多源数据
+        - IndicatorService: 在计算指标前调用clean_data清洗数据
+        - 其他服务层: 调用resample_data进行周期转换
+    """
+
     @staticmethod
     def merge_data(data_list: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        合并多个DataFrame为一个
+
+        参数:
+            data_list: DataFrame列表
+
+        返回值:
+            pd.DataFrame: 合并后的DataFrame，输入为空则返回空DataFrame
+
+        调用关系:
+            被调用: StockService等上层服务合并多源数据
+            调用: pd.concat
+
+        关键逻辑:
+            1. 检查输入列表是否为空
+            2. 使用pd.concat按行合并所有DataFrame
+            3. 重置索引后返回
+        """
         if not data_list:
             return pd.DataFrame()
         
@@ -15,6 +46,28 @@ class DataProcessor:
     
     @staticmethod
     def average_data(data_list: List[pd.DataFrame], method: str = "mean") -> pd.DataFrame:
+        """
+        对多个DataFrame按分组进行聚合计算
+
+        参数:
+            data_list: DataFrame列表
+            method: 聚合方法，"mean"表示均值，"median"表示中位数，默认"mean"
+
+        返回值:
+            pd.DataFrame: 聚合后的DataFrame，输入为空则返回空DataFrame
+
+        调用关系:
+            被调用: StockService等上层服务聚合多源数据
+            调用: pd.concat, groupby, agg
+
+        关键逻辑:
+            1. 检查输入列表是否为空或仅有一个元素
+            2. 合并所有DataFrame
+            3. 按datetime+stock_code+period分组
+            4. 对数值列使用指定聚合方法（mean/median）
+            5. stock_name取第一个，source合并为去重字符串
+            6. 返回聚合结果
+        """
         if not data_list:
             return pd.DataFrame()
         
@@ -54,6 +107,26 @@ class DataProcessor:
     
     @staticmethod
     def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        清洗股票数据，去除无效和异常记录
+
+        参数:
+            df: 原始股票数据DataFrame
+
+        返回值:
+            pd.DataFrame: 清洗后的DataFrame，按时间排序
+
+        调用关系:
+            被调用: IndicatorService.calculate_indicators_for_df_static 等计算指标前调用
+            调用: DataFrame.dropna, drop_duplicates, sort_values
+
+        关键逻辑:
+            1. 去除包含NaN的价格记录
+            2. 过滤成交量为负的记录
+            3. 验证价格逻辑：high >= low, high >= open, high >= close, low <= open, low <= close
+            4. 按stock_code+period+datetime去重，保留第一条
+            5. 按时间正序排序并重置索引
+        """
         if df.empty:
             return df
 
@@ -87,6 +160,29 @@ class DataProcessor:
     
     @staticmethod
     def resample_data(df: pd.DataFrame, target_period: str) -> pd.DataFrame:
+        """
+        将数据重采样到指定周期
+
+        参数:
+            df: 原始股票数据DataFrame，必须包含datetime列
+            target_period: 目标周期（1m/5m/15m/30m/1h/1d/1w/1M）
+
+        返回值:
+            pd.DataFrame: 重采样后的DataFrame
+
+        调用关系:
+            被调用: 上层服务需要进行周期转换时
+            调用: DataFrame.resample, agg
+
+        关键逻辑:
+            1. 将datetime列设为索引
+            2. 将目标周期映射为pandas频率字符串
+            3. 按目标频率重采样
+            4. open取first，high取max，low取min，close取last
+            5. volume和amount取sum
+            6. 补充stock_code、stock_name、period、source字段
+            7. 重置索引返回
+        """
         if df.empty:
             return df
         
@@ -123,9 +219,27 @@ class DataProcessor:
         return resampled
     
     @staticmethod
-    def generate_sample_data(stock_code: str, period: str = "1d", 
+    def generate_sample_data(stock_code: str, period: str = "1d",
                             days: int = 365, base_price: float = 100.0) -> pd.DataFrame:
-        """不使用模拟数据，抛出异常"""
+        """
+        生成模拟数据（已禁用）
+
+        参数:
+            stock_code: 股票代码
+            period: 时间周期
+            days: 生成天数
+            base_price: 基础价格
+
+        返回值:
+            无（始终抛出异常）
+
+        调用关系:
+            被调用: 不再被调用（已禁用）
+            调用: 无
+
+        关键逻辑:
+            直接抛出RuntimeError，禁止使用模拟数据，强制使用真实数据源
+        """
         raise RuntimeError(
             f"模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。"
             f"股票代码: {stock_code}"

@@ -5,6 +5,17 @@ import pandas as pd
 from app.utils.technical_indicators import TechnicalIndicators
 from app.core.logger import log_function_call, logger
 
+# =============================================================================
+# 模块级全局变量说明
+# =============================================================================
+# _xshg_calendar: exchange_calendars 交易所日历对象，用于精确判断A股交易日
+# _HAS_EXCHANGE_CALENDARS: 布尔标志，标识是否成功加载 exchange_calendars 库
+#
+# 作用：
+#   在整模块范围内提供统一的交易日判断能力，避免重复初始化和导入。
+#   如果 exchange_calendars 不可用，则降级为仅排除周末的简单判断。
+# =============================================================================
+
 # 尝试导入 exchange_calendars 进行精确交易日判断
 try:
     import exchange_calendars as ec
@@ -16,7 +27,26 @@ except Exception:
 
 
 def _is_trading_day(dt: date) -> bool:
-    """判断是否为A股交易日（使用 exchange_calendars 精确判断）"""
+    """
+    判断给定日期是否为A股交易日。
+
+    功能：
+        使用 exchange_calendars 库精确判断日期是否为上海证券交易所的交易日；
+        若该库不可用或发生异常，则降级为仅排除周六、周日的简单判断。
+
+    参数：
+        dt (date): 待判断的日期对象。
+
+    返回值：
+        bool: True 表示是交易日，False 表示非交易日。
+
+    调用关系：
+        被 _detect_missing_ranges 方法调用，用于在检测缺失数据时跳过非交易日。
+
+    关键逻辑：
+        1. 优先使用 _xshg_calendar.is_session() 精确判断；
+        2. 异常或库缺失时，回退到 weekday() < 5 的简单判断。
+    """
     if _HAS_EXCHANGE_CALENDARS and _xshg_calendar is not None:
         try:
             return _xshg_calendar.is_session(pd.Timestamp(dt))
@@ -28,10 +58,53 @@ def _is_trading_day(dt: date) -> bool:
 
 
 class IndicatorService:
+    """
+    技术指标服务类。
+
+    功能：
+        提供股票数据的查询、技术指标计算、信号生成以及缺失范围检测等能力。
+        所有数据库操作均通过 SQLAlchemy Session 进行，指标计算委托给 TechnicalIndicators 工具类。
+
+    调用关系：
+        通常由 API 层（如 FastAPI 路由）实例化并调用其公共方法。
+    """
+
     def __init__(self, db: Session):
+        """
+        初始化 IndicatorService 实例。
+
+        参数：
+            db (Session): SQLAlchemy 数据库会话对象，用于执行 ORM 查询和提交事务。
+
+        返回值：
+            无。
+
+        调用关系：
+            由上层业务代码（如 API 路由）在创建服务实例时调用。
+        """
         self.db = db
-    
+
     def _stock_list_to_dataframe(self, stock_data_list):
+        """
+        将股票数据对象列表转换为 pandas DataFrame，并按时间升序排列。
+
+        参数：
+            stock_data_list (List[StockData]): StockData ORM 对象列表，
+                每个对象包含 datetime、open_price、high_price、low_price、close_price、volume、amount 等属性。
+
+        返回值：
+            pd.DataFrame: 包含股票行情数据的 DataFrame，列名为 datetime、open_price、high_price、low_price、close_price、volume、amount，
+                已按 datetime 升序排序并重置索引。
+
+        调用关系：
+            被 get_stock_data_with_indicators、calculate_and_save_indicators 调用，
+            用于将 ORM 查询结果转换为 TechnicalIndicators 可处理的 DataFrame 格式。
+
+        关键逻辑：
+            1. 遍历 stock_data_list，提取每个对象的字段到字典列表；
+            2. 使用 pd.DataFrame 构造数据框；
+            3. 按 datetime 列排序并 reset_index(drop=True) 清理索引。
+        """
         data = []
         for stock in stock_data_list:
             data.append({
@@ -47,6 +120,25 @@ class IndicatorService:
         return df.sort_values('datetime').reset_index(drop=True)
     
     def _save_indicators_to_database(self, stock_data_list, df):
+        """
+        将计算得到的技术指标回写到数据库对应的 StockData 记录中。
+
+        参数：
+            stock_data_list (List[StockData]): StockData ORM 对象列表，与 df 行一一对应。
+            df (pd.DataFrame): 包含技术指标列（如 ma5、kdj_k、macd、rsi、bb_upper 等）的 DataFrame。
+
+        返回值：
+            无（通过 self.db.commit() 提交事务）。
+
+        调用关系：
+            被 get_stock_data_with_indicators（当 auto_save=True 时）和 calculate_and_save_indicators 调用。
+
+        关键逻辑：
+            1. 按索引遍历 stock_data_list 和 df 的每一行；
+            2. 检查 DataFrame 中是否存在对应指标列，若存在且值有效（pd.notna），则赋值给 ORM 对象；
+            3. 支持的指标包括：MA（5/10/20/60）、KDJ（K/D/J）、MACD（DIF/DEA/MACD）、RSI、布林带（上/中/下轨）；
+            4. 遍历结束后执行 self.db.commit() 持久化修改。
+        """
         for i, stock in enumerate(stock_data_list):
             if i >= len(df):
                 break
@@ -88,6 +180,28 @@ class IndicatorService:
         self.db.commit()
     
     def _format_result(self, stock_data_list):
+        """
+        将 StockData ORM 对象列表格式化为标准字典列表，用于 API 响应返回。
+
+        参数：
+            stock_data_list (List[StockData]): 数据库查询得到的 StockData ORM 对象列表。
+
+        返回值：
+            List[Dict[str, Any]]: 包含股票行情及指标数据的字典列表，每个字典的键包括：
+                datetime、open_price、high_price、low_price、close_price、volume、amount、
+                ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、macd_signal、macd_histogram、
+                rsi、bb_upper、bb_middle、bb_lower。
+                所有数值字段均转为 float 或 None。
+
+        调用关系：
+            被 get_stock_data_with_indicators 调用，用于在数据库已有完整指标时直接返回格式化数据。
+
+        关键逻辑：
+            1. 遍历 stock_data_list；
+            2. 将 datetime 转为 ISO 格式字符串；
+            3. 将各价格、成交量及指标字段转为 float（若存在），否则置为 None；
+            4. 收集为字典并追加到结果列表。
+        """
         result = []
         for stock in stock_data_list:
             item = {
@@ -117,6 +231,30 @@ class IndicatorService:
         return result
     
     def _format_result_with_calculated_indicators(self, stock_data_list, df):
+        """
+        将 StockData ORM 对象与刚计算出的指标 DataFrame 合并，格式化为标准字典列表。
+
+        参数：
+            stock_data_list (List[StockData]): 数据库查询得到的 StockData ORM 对象列表。
+            df (pd.DataFrame): 刚通过 TechnicalIndicators.calculate_all_indicators 计算得到的指标 DataFrame，
+                包含 ma5、kdj_k、macd、rsi、bb_upper 等列。
+
+        返回值：
+            List[Dict[str, Any]]: 合并后的股票数据字典列表，优先使用数据库中已保存的指标值；
+                若数据库值为空，则回退到使用 DataFrame 中刚计算出的指标值。
+
+        调用关系：
+            被 get_stock_data_with_indicators 调用，用于在检测到缺失指标并重新计算后返回结果。
+
+        关键逻辑：
+            1. 遍历 stock_data_list，按索引对齐 df 的对应行；
+            2. 基础行情字段（open_price、close_price 等）直接从 ORM 对象读取；
+            3. 指标字段采用“数据库优先”策略：
+               - 若 ORM 对象上已有该指标值（非 None），直接使用；
+               - 否则从 df 对应行中读取（若列存在且值有效）；
+               - 仍无则置为 None；
+            4. 所有数值转为 float，datetime 转为 ISO 格式字符串。
+        """
         result = []
         for i, stock in enumerate(stock_data_list):
             if i >= len(df):
@@ -166,18 +304,48 @@ class IndicatorService:
         auto_save: bool = True
     ) -> Dict[str, Any]:
         """
-        获取股票数据及技术指标
+        获取指定股票在指定周期和日期范围内的行情数据及技术指标。
 
-        Args:
-            stock_code: 股票代码
-            period: 时间周期（如 1d, 1h, 1w, 1M）
-            start_date: 开始日期
-            end_date: 结束日期
-            limit: 返回数据条数限制
-            auto_save: 是否自动保存计算结果到数据库
+        功能：
+            1. 将短代码转换为完整代码（如 000001 -> 000001.SZ）；
+            2. 检测请求日期范围内是否存在数据缺失，并标记缺失区间；
+            3. 查询数据库获取已有数据；
+            4. 检查指标完整性，若缺失则调用 TechnicalIndicators 重新计算；
+            5. 根据 auto_save 参数决定是否将计算结果回写数据库；
+            6. 返回格式化后的数据及缺失区间信息。
 
-        Returns:
-            Dict: 包含股票数据和缺失范围信息
+        参数：
+            stock_code (str): 股票代码，可为短代码（如 000001）或完整代码（如 000001.SZ）。
+            period (str): 时间周期，如 "1d"（日线）、"1h"（小时线）、"1w"（周线）、"1M"（月线）。
+            start_date (Optional[str]): 开始日期，格式 "%Y-%m-%d"；为 None 时不限制起始时间。
+            end_date (Optional[str]): 结束日期，格式 "%Y-%m-%d"；为 None 时不限制结束时间。
+            limit (Optional[int]): 返回数据条数上限；为 None 时返回全部数据。
+            auto_save (bool): 是否在计算完缺失指标后自动保存到数据库，默认为 True。
+
+        返回值：
+            Dict[str, Any]: 包含两个键：
+                - "data" (List[Dict]): 格式化后的股票行情及指标数据列表；
+                - "missing_ranges" (List[Dict]): 数据缺失的日期区间列表，每个元素包含 start、end，
+                  若包含今天则可能带有 "source": "realtime" 标记。
+
+        调用关系：
+            由 API 层（如 FastAPI 路由）调用，是 IndicatorService 的核心公共入口方法。
+            内部调用：
+                - _detect_missing_ranges、_merge_overlapping_ranges（检测并合并缺失区间）
+                - _stock_list_to_dataframe（转换为 DataFrame）
+                - TechnicalIndicators.calculate_all_indicators（计算指标）
+                - _save_indicators_to_database（保存指标，可选）
+                - _format_result / _format_result_with_calculated_indicators（格式化返回）
+
+        关键逻辑：
+            1. 代码转换：若 stock_code 不含 "."，则从 StockCode 表查询对应的完整代码；
+            2. 缺失检测：在 start_date ~ end_date 范围内，遍历每个交易日检查数据库是否存在数据；
+               若缺失且包含今天，则将今天单独标记为 realtime 来源；
+            3. 数据查询：应用日期过滤和 limit 限制，limit 时先 DESC 取最近 N 条再反转回 ASC；
+            4. 指标检查：遍历数据检查 ma5、k、macd 是否存在 None，若全部存在则直接返回；
+            5. 指标计算：缺失时转换为 DataFrame 并调用 calculate_all_indicators；
+            6. 自动保存：auto_save 为 True 时，调用 _save_indicators_to_database 回写数据库；
+            7. 结果返回：根据是否重新计算，选择 _format_result 或 _format_result_with_calculated_indicators。
         """
         # 将短代码转换为完整代码（如 000001 -> 000001.SZ）
         from app.models.stock_data import StockCode
@@ -319,9 +487,33 @@ class IndicatorService:
         return {"data": self._format_result_with_calculated_indicators(stock_data_list, df), "missing_ranges": missing_ranges}
     
     def calculate_and_save_indicators(self, stock_code: str, period: str = "1d"):
+        """
+        为指定股票的全部历史数据计算技术指标并保存到数据库。
+
+        参数：
+            stock_code (str): 股票完整代码（如 000001.SZ）。
+            period (str): 时间周期，默认为 "1d"（日线）。
+
+        返回值：
+            int: 实际处理并保存的数据条数；若数据库中无该股票数据则返回 0。
+
+        调用关系：
+            可由后台任务或管理接口调用，用于批量补全某只股票的历史指标。
+            内部调用：
+                - _stock_list_to_dataframe（转换为 DataFrame）
+                - TechnicalIndicators.calculate_all_indicators（计算指标）
+                - _save_indicators_to_database（保存到数据库）
+
+        关键逻辑：
+            1. 查询数据库中该股票指定周期的全部数据，按时间升序排列；
+            2. 若数据为空，直接返回 0；
+            3. 转换为 DataFrame 后调用 calculate_all_indicators 计算全套指标；
+            4. 调用 _save_indicators_to_database 将结果回写数据库并提交事务；
+            5. 返回处理的数据条数。
+        """
         from app.models.stock_data import StockData
         from sqlalchemy import desc
-        
+
         query = self.db.query(StockData).filter(
             StockData.stock_code == stock_code,
             StockData.period == period
@@ -340,12 +532,75 @@ class IndicatorService:
     
     @staticmethod
     def calculate_indicators_for_df_static(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        静态方法：为给定的行情 DataFrame 计算全套技术指标。
+
+        参数：
+            df (pd.DataFrame): 包含股票行情数据的 DataFrame，
+                必须包含 datetime、open_price、high_price、low_price、close_price、volume 等列。
+
+        返回值：
+            pd.DataFrame: 在原 DataFrame 基础上追加指标列后的新 DataFrame，
+                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、macd_signal、macd_histogram、rsi、bb_upper、bb_middle、bb_lower 等列。
+
+        调用关系：
+            可在不实例化 IndicatorService 的情况下直接调用，适用于纯数据处理场景。
+            内部调用 TechnicalIndicators.calculate_all_indicators 完成实际计算。
+
+        关键逻辑：
+            直接委托给 TechnicalIndicators.calculate_all_indicators，保持与实例方法一致的计算逻辑。
+        """
         return TechnicalIndicators.calculate_all_indicators(df)
-    
+
     def calculate_indicators_for_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        实例方法：为给定的行情 DataFrame 计算全套技术指标。
+
+        参数：
+            df (pd.DataFrame): 包含股票行情数据的 DataFrame，
+                必须包含 datetime、open_price、high_price、low_price、close_price、volume 等列。
+
+        返回值：
+            pd.DataFrame: 在原 DataFrame 基础上追加指标列后的新 DataFrame，
+                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、macd_signal、macd_histogram、rsi、bb_upper、bb_middle、bb_lower 等列。
+
+        调用关系：
+            由需要结合服务实例上下文（如日志、数据库会话）的调用方使用。
+            内部调用 TechnicalIndicators.calculate_all_indicators 完成实际计算。
+
+        关键逻辑：
+            直接委托给 TechnicalIndicators.calculate_all_indicators，与静态方法功能一致，
+            但以实例方法形式提供，便于在类体系内统一调用。
+        """
         return TechnicalIndicators.calculate_all_indicators(df)
     
     def get_kdj_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        从行情 DataFrame 中识别 KDJ 指标的金叉/死叉交易信号。
+
+        参数：
+            df (pd.DataFrame): 包含股票行情数据的 DataFrame，
+                需包含 datetime、close_price 列；KDJ 相关列（kdj_k、kdj_d、kdj_j）可由本方法内部计算生成。
+
+        返回值：
+            List[Dict[str, Any]]: KDJ 信号列表，每个元素为字典，包含：
+                - datetime (str): 信号发生时间的 ISO 格式字符串；
+                - type (str): 信号类型，"buy"（金叉买入）或 "sell"（死叉卖出）；
+                - indicator (str): 指标名称，固定为 "KDJ"；
+                - reason (str): 信号原因描述；
+                - price (float): 信号发生时的收盘价。
+
+        调用关系：
+            被 get_all_signals 调用，也可单独用于获取 KDJ 专项信号。
+            内部调用 TechnicalIndicators.calculate_kdj 计算 KDJ 指标。
+
+        关键逻辑：
+            1. 调用 TechnicalIndicators.calculate_kdj(df) 确保 DataFrame 包含 kdj_k、kdj_d、kdj_j 列；
+            2. 从第 1 行开始遍历（需与前一行比较）；
+            3. 买入信号（金叉）：前一日 K <= D，当日 K > D，且当日 K < 20（超卖区域）；
+            4. 卖出信号（死叉）：前一日 K >= D，当日 K < D，且当日 K > 80（超买区域）；
+            5. 仅当涉及的所有值均有效（pd.notna）时才生成信号。
+        """
         signals = []
         df = TechnicalIndicators.calculate_kdj(df)
         
@@ -377,6 +632,32 @@ class IndicatorService:
         return signals
     
     def get_macd_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        从行情 DataFrame 中识别 MACD 指标的金叉/死叉交易信号。
+
+        参数：
+            df (pd.DataFrame): 包含股票行情数据的 DataFrame，
+                需包含 datetime、close_price 列；MACD 相关列（macd、macd_signal）可由本方法内部计算生成。
+
+        返回值：
+            List[Dict[str, Any]]: MACD 信号列表，每个元素为字典，包含：
+                - datetime (str): 信号发生时间的 ISO 格式字符串；
+                - type (str): 信号类型，"buy"（金叉买入）或 "sell"（死叉卖出）；
+                - indicator (str): 指标名称，固定为 "MACD"；
+                - reason (str): 信号原因描述；
+                - price (float): 信号发生时的收盘价。
+
+        调用关系：
+            被 get_all_signals 调用，也可单独用于获取 MACD 专项信号。
+            内部调用 TechnicalIndicators.calculate_macd 计算 MACD 指标。
+
+        关键逻辑：
+            1. 调用 TechnicalIndicators.calculate_macd(df) 确保 DataFrame 包含 macd、macd_signal 列；
+            2. 从第 1 行开始遍历（需与前一行比较）；
+            3. 买入信号（金叉）：前一日 MACD <= 信号线，当日 MACD > 信号线；
+            4. 卖出信号（死叉）：前一日 MACD >= 信号线，当日 MACD < 信号线；
+            5. 仅当涉及的所有值均有效（pd.notna）时才生成信号。
+        """
         signals = []
         df = TechnicalIndicators.calculate_macd(df)
         
@@ -407,7 +688,33 @@ class IndicatorService:
         return signals
     
     def _detect_missing_ranges(self, stock_data_list, req_start, req_end):
-        """检测数据中的缺失范围（只检查交易日，当天缺失用实时接口）"""
+        """
+        检测请求日期范围内数据库中缺失的数据区间（仅针对交易日）。
+
+        参数：
+            stock_data_list (List[StockData]): 已查询到的股票数据 ORM 对象列表，按时间升序排列。
+            req_start (datetime): 请求范围的起始日期时间。
+            req_end (datetime): 请求范围的结束日期时间。
+
+        返回值：
+            List[Dict[str, Any]]: 缺失区间列表，每个元素为字典，包含：
+                - start (str): 缺失区间开始日期，格式 "%Y-%m-%d"；
+                - end (str): 缺失区间结束日期，格式 "%Y-%m-%d"；
+                - source (str, 可选): 若缺失区间仅为今天，标记为 "realtime"，表示建议用实时接口获取。
+
+        调用关系：
+            被 get_stock_data_with_indicators 调用，用于识别用户请求范围内尚未入库的数据区间。
+            内部调用 _is_trading_day 辅助函数判断是否为交易日。
+
+        关键逻辑：
+            1. 若 stock_data_list 为空，整个请求范围视为缺失；
+               若范围跨越今天，则将今天之前的部分和今天分开处理（今天标记 realtime）；
+            2. 将已有数据的日期提取为集合 existing_dates，便于 O(1) 查找；
+            3. 从 req_start 到 req_end 逐日遍历，跳过未来日期和非交易日；
+            4. 发现缺失日期时，向前查找连续缺失的结束位置；
+            5. 对包含今天的缺失范围进行拆分：今天之前用历史接口，今天单独标记 realtime；
+            6. 仅在今天及之前的日期范围内生成缺失记录，未来日期不纳入缺失范围。
+        """
         from datetime import timedelta
         from datetime import date
 
@@ -516,7 +823,29 @@ class IndicatorService:
         return missing_ranges
     
     def _merge_overlapping_ranges(self, ranges):
-        """合并重叠的日期范围"""
+        """
+        合并重叠或相邻的日期范围，减少冗余的缺失区间记录。
+
+        参数：
+            ranges (List[Dict[str, Any]]): 缺失区间列表，每个元素包含 start（"%Y-%m-%d"）和 end（"%Y-%m-%d"）键。
+
+        返回值：
+            List[Dict[str, Any]]: 合并后的区间列表，按开始日期升序排列，
+                重叠或相邻的区间已被合并为一个连续区间。
+
+        调用关系：
+            被 get_stock_data_with_indicators 调用，在多次检测缺失范围后用于去重和合并。
+
+        关键逻辑：
+            1. 若输入为空，直接返回空列表；
+            2. 按 start 日期字符串排序（字典序即时间序，因为格式为 "%Y-%m-%d"）；
+            3. 初始化 merged 列表，放入第一个区间；
+            4. 遍历后续区间：
+               - 若当前区间的 start <= 上一个区间的 end + 1 天（相邻也合并），
+                 则更新上一个区间的 end 为两者较大值；
+               - 否则将当前区间作为新区间追加；
+            5. 返回合并后的列表。
+        """
         if not ranges:
             return []
         
@@ -540,6 +869,28 @@ class IndicatorService:
         return merged
 
     def get_all_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        综合获取 KDJ 和 MACD 两种技术指标的全部交易信号。
+
+        参数：
+            df (pd.DataFrame): 包含股票行情数据的 DataFrame，
+                需包含 datetime、close_price、high_price、low_price、open_price、volume 等列。
+
+        返回值：
+            List[Dict[str, Any]]: KDJ 与 MACD 信号的合并列表，元素顺序为 KDJ 信号在前，MACD 信号在后。
+                每个信号字典包含 datetime、type、indicator、reason、price 等键。
+
+        调用关系：
+            由 API 层或业务逻辑层调用，用于一次性获取多种指标的交易信号。
+            内部调用：
+                - get_kdj_signals（计算 KDJ 金叉/死叉信号）
+                - get_macd_signals（计算 MACD 金叉/死叉信号）
+
+        关键逻辑：
+            1. 分别调用 get_kdj_signals 和 get_macd_signals 生成各自信号列表；
+            2. 将两个列表拼接后返回，不做去重或排序；
+            3. 调用方可根据 datetime 或 indicator 字段进一步筛选、排序。
+        """
         kdj_signals = self.get_kdj_signals(df)
         macd_signals = self.get_macd_signals(df)
         return kdj_signals + macd_signals

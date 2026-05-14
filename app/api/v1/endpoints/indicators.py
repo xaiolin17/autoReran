@@ -9,7 +9,8 @@ from app.core.logger import log_api_call, logger
 
 router = APIRouter()
 
-# 简单的后台任务状态管理
+# 简单的后台任务状态管理（内存存储，重启后丢失）
+# 结构: {task_id: {"status": str, "progress": int, "message": str, ...}}
 task_status: Dict[str, Dict] = {}
 
 
@@ -25,19 +26,35 @@ def get_stock_data_with_indicators(
     db: Session = Depends(get_db)
 ):
     """
-    获取股票数据及技术指标
-    
-    Args:
-        stock_code: 股票代码
+    获取股票数据及技术指标（主接口）
+
+    参数:
+        stock_code: 股票代码（如000001或000001.SZ）
         period: 时间周期（如 1d, 1h, 1w, 1M）
-        start_date: 开始日期
-        end_date: 结束日期
-        limit: 返回数据条数限制
-        background_tasks: 后台任务管理器
-        db: 数据库会话
-    
-    Returns:
-        Dict: 包含股票数据和缺失范围信息
+        start_date: 开始日期（YYYY-MM-DD格式）
+        end_date: 结束日期（YYYY-MM-DD格式）
+        limit: 返回数据条数限制（有日期范围时自动设为None）
+        background_tasks: FastAPI后台任务管理器，用于启动缺失数据下载
+        db: 数据库会话（由FastAPI依赖注入）
+
+    返回值:
+        Dict: 包含以下字段:
+            - data: 股票数据及技术指标列表
+            - missing_ranges: 缺失数据时间段列表
+            - stock_code: 股票代码
+            - stock_name: 股票名称
+            - download_task_id: 后台下载任务ID（如有缺失数据）
+
+    调用关系:
+        被调用: 前端HTTP GET /api/v1/indicators/{stock_code}
+        调用: IndicatorService.get_stock_data_with_indicators, StockService, _download_missing_ranges_task
+
+    关键逻辑:
+        1. 从StockData或StockCode表查询股票中文名称
+        2. 有日期范围时取消limit限制，确保缺失检测完整
+        3. 调用IndicatorService获取数据及缺失范围
+        4. 若有缺失数据且提供background_tasks，启动后台下载任务
+        5. 通过WebSocket通知前端下载进度
     """
     logger.info(f"获取股票指标数据请求: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
     
@@ -122,7 +139,29 @@ def get_recent_stock_data(
     days: int = 180,  # 默认加载半年数据
     db: Session = Depends(get_db)
 ):
-    """获取最近N天的数据（快速加载）"""
+    """
+    获取最近N天的数据（快速加载）
+
+    参数:
+        stock_code: 股票代码（短代码或完整代码）
+        period: 时间周期，默认"1d"
+        days: 回溯天数，默认180天（约半年）
+        db: 数据库会话（由FastAPI依赖注入）
+
+    返回值:
+        List[Dict]: 最近N天的股票数据及技术指标列表
+
+    调用关系:
+        被调用: 前端HTTP GET /api/v1/indicators/{stock_code}/recent
+        调用: IndicatorService.calculate_indicators_for_df_static
+
+    关键逻辑:
+        1. 若传入短代码，从StockCode表查询完整代码
+        2. 计算start_date和end_date（当前日期回溯days天）
+        3. 从数据库查询指定范围的数据
+        4. 转换为DataFrame并计算技术指标
+        5. 将结果转换为字典列表返回
+    """
     from app.models.stock_data import StockData, StockCode
     from sqlalchemy import desc
     import pandas as pd
@@ -200,7 +239,35 @@ def get_paged_stock_data(
     count: int = 90,  # 每次加载90天
     db: Session = Depends(get_db)
 ):
-    """分页获取历史数据（用于加载更多）"""
+    """
+    分页获取历史数据（用于加载更多）
+
+    参数:
+        stock_code: 股票代码（短代码或完整代码）
+        period: 时间周期，默认"1d"
+        offset: 分页偏移量，默认0
+        count: 每页数量，默认90条
+        db: 数据库会话（由FastAPI依赖注入）
+
+    返回值:
+        Dict: 包含以下字段:
+            - data: 股票数据及技术指标列表
+            - total: 总记录数
+            - offset: 下一页偏移量
+            - has_more: 是否还有更多数据
+
+    调用关系:
+        被调用: 前端HTTP GET /api/v1/indicators/{stock_code}/paged
+        调用: IndicatorService.calculate_indicators_for_df_static
+
+    关键逻辑:
+        1. 若传入短代码，从StockCode表查询完整代码
+        2. 按时间倒序查询数据库，获取total总数
+        3. 使用offset和limit分页
+        4. 将分页结果按时间正序排序
+        5. 转换为DataFrame并计算技术指标
+        6. 组装分页信息返回
+    """
     from app.models.stock_data import StockData, StockCode
     from sqlalchemy import desc
     import pandas as pd
@@ -290,7 +357,34 @@ def download_stock_data(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
-    """启动后台下载数据任务"""
+    """
+    启动后台下载数据任务
+
+    参数:
+        stock_code: 股票代码
+        period: 时间周期，默认"1d"
+        download_all: 是否下载所有周期（1h/1d/1w/1M），默认False
+        background_tasks: FastAPI后台任务管理器
+        db: 数据库会话（由FastAPI依赖注入）
+
+    返回值:
+        Dict: 包含以下字段:
+            - task_id: 后台任务ID
+            - message: 状态消息
+            - has_existing_data: 是否已有历史数据
+
+    调用关系:
+        被调用: 前端HTTP POST /api/v1/indicators/{stock_code}/download
+        调用: StockService.get_stock_data, _download_task, _download_all_periods_task
+
+    关键逻辑:
+        1. 生成唯一task_id
+        2. 检查是否已有数据
+        3. 若download_all为True，启动全周期下载任务
+        4. 若已有数据，启动增量更新任务
+        5. 若无数据，启动全量下载任务
+        6. 立即返回任务信息，下载在后台执行
+    """
     task_id = f"{stock_code}_{datetime.now().timestamp()}"
     
     # 先检查是否已有数据
@@ -325,7 +419,24 @@ def download_stock_data(
 
 @router.get("/task/{task_id}/status")
 def get_task_status(task_id: str):
-    """获取后台任务状态"""
+    """
+    获取后台任务状态
+
+    参数:
+        task_id: 后台任务ID
+
+    返回值:
+        Dict: 任务状态信息，包含status/progress/message等字段
+              若任务不存在返回{"status": "not_found", ...}
+
+    调用关系:
+        被调用: 前端HTTP GET /api/v1/indicators/task/{task_id}/status
+        调用: 无（直接读取task_status字典）
+
+    关键逻辑:
+        1. 从task_status字典中查询任务状态
+        2. 若不存在则返回not_found状态
+    """
     status = task_status.get(task_id, {
         "status": "not_found",
         "progress": 0,
@@ -335,7 +446,30 @@ def get_task_status(task_id: str):
 
 
 def _download_task(stock_code: str, period: str, task_id: str, incremental: bool):
-    """后台下载任务"""
+    """
+    后台下载任务（单周期）
+
+    参数:
+        stock_code: 股票代码
+        period: 时间周期
+        task_id: 任务ID（用于更新任务状态）
+        incremental: 是否增量更新（True只更新最近30天，False下载一年）
+
+    返回值:
+        无
+
+    调用关系:
+        被调用: download_stock_data 通过background_tasks.add_task启动
+        调用: StockService.fetch_and_save_stock_data, IndicatorService.get_stock_data_with_indicators
+
+    关键逻辑:
+        1. 创建独立数据库会话
+        2. 根据incremental决定日期范围
+        3. 调用StockService下载并保存数据
+        4. 触发IndicatorService计算技术指标
+        5. 更新task_status状态为completed或error
+        6. 确保数据库连接关闭
+    """
     from app.core.database import SessionLocal
     db_local = SessionLocal()
     
@@ -394,7 +528,26 @@ def _download_task(stock_code: str, period: str, task_id: str, incremental: bool
 
 
 def _merge_missing_ranges(missing_ranges: List[Dict]) -> List[Dict]:
-    """合并相邻的缺失范围，减少API调用次数（实时接口范围不合并）"""
+    """
+    合并相邻的缺失范围，减少API调用次数（实时接口范围不合并）
+
+    参数:
+        missing_ranges: 缺失数据范围列表，每项包含start/end/source字段
+
+    返回值:
+        List[Dict]: 合并后的缺失范围列表
+
+    调用关系:
+        被调用: _download_missing_ranges_task
+        调用: datetime.strptime
+
+    关键逻辑:
+        1. 分离实时接口范围（source="realtime"）和历史接口范围
+        2. 历史范围按start日期排序
+        3. 遍历合并：若当前范围与上一个间隔<=3天则合并
+        4. 实时范围不合并，直接追加到结果末尾
+        5. 返回合并后的列表
+    """
     if not missing_ranges or len(missing_ranges) <= 1:
         return missing_ranges
 
@@ -424,7 +577,31 @@ def _merge_missing_ranges(missing_ranges: List[Dict]) -> List[Dict]:
 
 
 def _download_missing_ranges_task(stock_code: str, period: str, missing_ranges: List[Dict], task_id: str):
-    """后台下载缺失数据范围的任务"""
+    """
+    后台下载缺失数据范围的任务（带WebSocket通知）
+
+    参数:
+        stock_code: 股票代码
+        period: 时间周期
+        missing_ranges: 缺失数据范围列表
+        task_id: 任务ID
+
+    返回值:
+        无
+
+    调用关系:
+        被调用: get_stock_data_with_indicators 通过background_tasks.add_task启动
+        调用: _merge_missing_ranges, StockService.fetch_and_save_stock_data, IndicatorService.get_stock_data_with_indicators, WebSocketManager
+
+    关键逻辑:
+        1. 合并相邻缺失范围减少API调用
+        2. 遍历每个缺失范围，更新任务进度
+        3. 通过WebSocket广播下载进度
+        4. 根据source判断使用实时接口或历史接口
+        5. 下载完成后计算技术指标
+        6. 发送完成或错误WebSocket通知
+        7. 确保数据库连接关闭
+    """
     from app.core.database import SessionLocal
     from app.services.stock_service import StockService
     from app.services.indicator_service import IndicatorService
@@ -666,7 +843,31 @@ def _download_missing_ranges_task(stock_code: str, period: str, missing_ranges: 
 
 
 def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool):
-    """后台下载所有周期数据任务"""
+    """
+    后台下载所有周期数据任务
+
+    参数:
+        stock_code: 股票代码
+        task_id: 任务ID
+        incremental: 是否增量更新
+
+    返回值:
+        无
+
+    调用关系:
+        被调用: download_stock_data 当download_all=True时启动
+        调用: StockService.fetch_and_save_stock_data, IndicatorService.get_stock_data_with_indicators
+
+    关键逻辑:
+        1. 创建独立数据库会话
+        2. 定义需要下载的周期列表：["1h", "1d", "1w", "1M"]
+        3. 遍历每个周期，更新任务进度和状态
+        4. 根据incremental决定日期范围
+        5. 逐个周期下载数据并计算指标
+        6. 任一周期出错记录日志但继续其他周期
+        7. 更新task_status为completed或error
+        8. 确保数据库连接关闭
+    """
     from app.core.database import SessionLocal
     db_local = SessionLocal()
     
@@ -726,6 +927,28 @@ def get_indicator_signals(
     indicator_type: str = "all",
     db: Session = Depends(get_db)
 ):
+    """
+    获取技术指标交易信号
+
+    参数:
+        stock_code: 股票代码（短代码或完整代码）
+        indicator_type: 指标类型，"all"/"kdj"/"macd"，默认"all"
+        db: 数据库会话（由FastAPI依赖注入）
+
+    返回值:
+        Dict: 包含signals字段的交易信号列表
+
+    调用关系:
+        被调用: 前端HTTP GET /api/v1/indicators/signals/{stock_code}
+        调用: IndicatorService.get_kdj_signals/get_macd_signals/get_all_signals
+
+    关键逻辑:
+        1. 若传入短代码，从StockCode表查询完整代码
+        2. 查询最近500条日线数据
+        3. 转换为DataFrame并排序
+        4. 根据indicator_type调用对应信号计算方法
+        5. 返回交易信号列表
+    """
     from app.models.stock_data import StockData, StockCode
     from sqlalchemy import desc
     import pandas as pd

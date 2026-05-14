@@ -19,7 +19,16 @@ except ImportError:
 
 
 class RateLimiter:
-    """简单令牌桶限流器"""
+    """
+    简单令牌桶限流器
+
+    职责:
+        基于令牌桶算法实现API调用频率控制，防止短时间内大量请求导致服务被拒绝。
+        在指定时间窗口内限制最大调用次数，超出限制时阻塞或返回等待时间。
+
+    被调用方:
+        - TickFlowCrawler: 在发起TickFlow API请求前进行限流检查
+    """
 
     def __init__(self, max_calls: int = 10, period_seconds: int = 60):
         self.max_calls = max_calls
@@ -28,7 +37,25 @@ class RateLimiter:
         self._lock = threading.Lock()
 
     def acquire(self, timeout: float = 30.0) -> bool:
-        """尝试获取一个调用令牌，返回是否成功"""
+        """
+        尝试获取一个调用令牌，返回是否成功
+
+        参数:
+            timeout: 最大等待时间（秒），超过此时间仍未获取到令牌则返回False
+
+        返回值:
+            bool: 成功获取令牌返回True，超时返回False
+
+        调用关系:
+            被调用: TickFlowCrawler.fetch_stock_data 在发起API请求前调用
+            调用: 无（内部逻辑）
+
+        关键逻辑:
+            1. 清理过期调用记录（超出period_seconds的记录）
+            2. 检查当前窗口内调用次数是否小于max_calls
+            3. 若未满则记录当前时间并返回True
+            4. 若已满则等待0.5秒后重试，直到超时
+        """
         start_time = time.time()
         while True:
             with self._lock:
@@ -49,7 +76,24 @@ class RateLimiter:
             time.sleep(0.5)
 
     def get_wait_time(self) -> float:
-        """获取需要等待的时间（秒）"""
+        """
+        获取需要等待的时间（秒）
+
+        参数:
+            无
+
+        返回值:
+            float: 需要等待的秒数，0.0表示无需等待即可获取令牌
+
+        调用关系:
+            被调用: TickFlowCrawler.fetch_stock_data 用于预先检查是否需要等待
+            调用: 无（内部逻辑）
+
+        关键逻辑:
+            1. 清理过期调用记录
+            2. 若当前调用次数未满则返回0.0
+            3. 若已满则计算最早一个调用何时过期，返回剩余等待时间
+        """
         with self._lock:
             now = time.time()
             while self.calls and self.calls[0] < now - self.period_seconds:
@@ -66,7 +110,23 @@ class RateLimiter:
 
 
 class TickFlowCrawler(BaseCrawler):
-    """使用TickFlow作为数据源"""
+    """
+    TickFlow数据源爬虫
+
+    职责:
+        封装TickFlow SDK的调用，提供股票K线数据、实时行情数据的获取能力。
+        负责股票代码标准化、日期处理、数据格式转换、限流控制等功能。
+        继承自BaseCrawler，统一项目内爬虫接口。
+
+    被调用方:
+        - StockService: 调用fetch_stock_data获取股票历史数据
+        - 其他服务层: 调用fetch_realtime_data获取实时行情
+
+    调用方:
+        - RateLimiter: 控制API调用频率
+        - TickFlow SDK: 实际发起数据请求
+        - StockCode模型: 查询股票代码映射
+    """
 
     def __init__(self, db=None):
         self.available = TICKFLOW_AVAILABLE
@@ -79,7 +139,25 @@ class TickFlowCrawler(BaseCrawler):
         self._rate_limiter = RateLimiter(max_calls=10, period_seconds=60)
 
     def _get_tickflow(self):
-        """获取TickFlow实例（懒加载）"""
+        """
+        获取TickFlow实例（懒加载）
+
+        参数:
+            无
+
+        返回值:
+            TickFlow: TickFlow SDK实例，若初始化失败或API Key未设置则返回None
+
+        调用关系:
+            被调用: fetch_stock_data, fetch_realtime_data, fetch_realtime_data_as_df, _load_universe_symbols, get_universe_symbols
+            调用: settings.TICKFLOW_API_KEY, os.getenv
+
+        关键逻辑:
+            1. 若已初始化则直接返回缓存实例
+            2. 从settings或环境变量读取TICKFLOW_API_KEY
+            3. 若API Key未设置则标记不可用并返回None
+            4. 使用API Key初始化TickFlow客户端
+        """
         if self._tf is None and self.available:
             # 优先从 settings 读取（支持 .env 文件），其次从环境变量读取
             api_key = settings.TICKFLOW_API_KEY or os.getenv("TICKFLOW_API_KEY")
@@ -92,7 +170,27 @@ class TickFlowCrawler(BaseCrawler):
         return self._tf
 
     def _retry_fetch(self, fetch_func, *args, **kwargs):
-        """Retry helper with exponential backoff"""
+        """
+        带指数退避的重试辅助方法
+
+        参数:
+            fetch_func: 实际执行数据获取的可调用函数
+            *args: 传递给fetch_func的位置参数
+            **kwargs: 传递给fetch_func的关键字参数
+
+        返回值:
+            Any: fetch_func的返回结果，若所有重试均失败则返回None
+
+        调用关系:
+            被调用: fetch_stock_data 在调用tf.klines.get时使用
+            调用: fetch_func（传入的实际获取函数）
+
+        关键逻辑:
+            1. 最多重试max_retries次
+            2. 每次重试等待时间呈指数增长: retry_delay * (2 ** attempt)
+            3. 记录每次失败日志
+            4. 所有重试失败后记录错误并返回None
+        """
         last_exception = None
         for attempt in range(self.max_retries):
             try:
@@ -107,7 +205,25 @@ class TickFlowCrawler(BaseCrawler):
         return None
 
     def _normalize_stock_code(self, stock_code: str) -> str:
-        """标准化股票代码，去除市场前缀，只保留6位数字"""
+        """
+        标准化股票代码，去除市场前缀，只保留6位数字
+
+        参数:
+            stock_code: 原始股票代码，可能包含SH/SZ前缀或后缀
+
+        返回值:
+            str: 纯6位数字代码
+
+        调用关系:
+            被调用: get_full_symbol, _get_full_symbol_from_db, _load_universe_symbols
+            调用: 无（字符串处理）
+
+        关键逻辑:
+            1. 去除首尾空白并转为大写
+            2. 去除SH/SZ前缀（如SH600000 -> 600000）
+            3. 去除.SH/.SZ后缀（如600000.SH -> 600000）
+            4. 返回6位数字代码
+        """
         code = stock_code.strip().upper()
         # 去除 sh/sz/SH/SZ 前缀
         if len(code) > 6 and code[:2] in ('SH', 'SZ', 'sh', 'sz'):
@@ -118,7 +234,25 @@ class TickFlowCrawler(BaseCrawler):
         return code
 
     def _extract_suffix(self, stock_code: str) -> Optional[str]:
-        """提取用户输入中的市场后缀（如 .SH / .SZ）"""
+        """
+        提取用户输入中的市场后缀（如 .SH / .SZ）
+
+        参数:
+            stock_code: 原始股票代码，可能包含.SH/.SZ后缀
+
+        返回值:
+            Optional[str]: 市场后缀"SH"或"SZ"，若无后缀则返回None
+
+        调用关系:
+            被调用: get_full_symbol 用于判断用户是否明确指定了市场
+            调用: 无（字符串处理）
+
+        关键逻辑:
+            1. 去除首尾空白并转为大写
+            2. 按"."分割代码
+            3. 若第二部分为SH或SZ则返回该后缀
+            4. 否则返回None
+        """
         code = stock_code.strip().upper()
         if '.' in code:
             parts = code.split('.')
@@ -127,7 +261,26 @@ class TickFlowCrawler(BaseCrawler):
         return None
 
     def _load_universe_symbols(self):
-        """加载 CN_Equity_A 的 symbols 列表，用于代码映射"""
+        """
+        加载 CN_Equity_A 的 symbols 列表，用于代码映射
+
+        参数:
+            无
+
+        返回值:
+            无（结果缓存到self._universe_symbols和self._symbol_map）
+
+        调用关系:
+            被调用: get_full_symbol, fetch_stock_list, get_all_symbols, get_symbol_map
+            调用: _get_tickflow, tf.universes.get
+
+        关键逻辑:
+            1. 若已加载则直接返回（避免重复请求）
+            2. 获取TickFlow实例
+            3. 调用tf.universes.get("CN_Equity_A")获取A股全量代码
+            4. 构建短代码到完整代码的映射表 {short_code: full_symbol}
+            5. 缓存到实例变量中
+        """
         if self._universe_symbols:
             return
 
@@ -151,7 +304,26 @@ class TickFlowCrawler(BaseCrawler):
             logger.error(f"加载 universe symbols 失败: {e}")
 
     def _get_full_symbol_from_db(self, stock_code: str) -> Optional[str]:
-        """从数据库查询完整代码"""
+        """
+        从数据库查询完整代码
+
+        参数:
+            stock_code: 股票代码（短代码或带后缀的代码）
+
+        返回值:
+            Optional[str]: 数据库中存储的完整代码（如000001.SZ），未找到则返回None
+
+        调用关系:
+            被调用: get_full_symbol 作为代码解析的第二优先级
+            调用: _normalize_stock_code, StockCode模型查询
+
+        关键逻辑:
+            1. 检查数据库会话是否存在
+            2. 标准化股票代码为6位数字
+            3. 查询StockCode表中code字段匹配的记录
+            4. 返回第一条记录的name字段（完整代码）
+            5. 异常时静默处理并返回None
+        """
         if self._db is None:
             return None
         try:
@@ -165,7 +337,26 @@ class TickFlowCrawler(BaseCrawler):
         return None
 
     def get_full_symbol(self, stock_code: str) -> Optional[str]:
-        """将短代码转换为完整代码（如 000001 -> 000001.SZ）"""
+        """
+        将短代码转换为完整代码（如 000001 -> 000001.SZ）
+
+        参数:
+            stock_code: 股票代码（短代码如000001，或带后缀如000001.SZ）
+
+        返回值:
+            Optional[str]: 完整代码（如000001.SZ），解析失败则返回None
+
+        调用关系:
+            被调用: fetch_stock_data, fetch_realtime_data, fetch_realtime_data_as_df, _convert_to_standard_format
+            调用: _normalize_stock_code, _extract_suffix, _get_full_symbol_from_db, _load_universe_symbols
+
+        关键逻辑:
+            1. 若用户明确指定后缀（如.SH/.SZ），直接使用
+            2. 否则先查数据库StockCode表
+            3. 再查本地缓存的symbol_map
+            4. 若缓存未命中则加载universe symbols
+            5. 最后根据代码规则推断（600/601/603/605/688/689开头为.SH，其余为.SZ）
+        """
         clean_code = self._normalize_stock_code(stock_code)
         user_suffix = self._extract_suffix(stock_code)
 
@@ -196,7 +387,24 @@ class TickFlowCrawler(BaseCrawler):
             return f"{clean_code}.SZ"
 
     def _parse_date(self, date_str: str) -> datetime:
-        """解析日期字符串，支持多种格式"""
+        """
+        解析日期字符串，支持多种格式
+
+        参数:
+            date_str: 日期字符串（如20240101、2024-01-01、2024/01/01）
+
+        返回值:
+            datetime: 解析后的日期时间对象
+
+        调用关系:
+            被调用: _get_start_end_dates
+            调用: datetime.strptime
+
+        关键逻辑:
+            1. 依次尝试三种格式：%Y%m%d、%Y-%m-%d、%Y/%m/%d
+            2. 任一格式解析成功则返回结果
+            3. 所有格式均失败则抛出ValueError
+        """
         formats = ["%Y%m%d", "%Y-%m-%d", "%Y/%m/%d"]
         for fmt in formats:
             try:
@@ -211,7 +419,27 @@ class TickFlowCrawler(BaseCrawler):
         end_date: Optional[str] = None,
         default_months: float = 1.0
     ) -> tuple:
-        """统一处理 start_date 和 end_date，返回毫秒时间戳"""
+        """
+        统一处理 start_date 和 end_date，返回毫秒时间戳
+
+        参数:
+            start_date: 开始日期字符串，None表示使用默认值
+            end_date: 结束日期字符串，None表示使用当前日期
+            default_months: 默认回溯月数（当start_date为None时使用）
+
+        返回值:
+            tuple: (start_ms, end_ms) 毫秒时间戳元组，日期无效返回(None, None)
+
+        调用关系:
+            被调用: fetch_stock_data
+            调用: _parse_date
+
+        关键逻辑:
+            1. end_date为None则使用当前日期时间
+            2. start_date为None则使用end_date回溯default_months个月
+            3. 检查start_date是否大于end_date，若是则返回(None, None)
+            4. 将日期转换为毫秒时间戳（TickFlow API需要）
+        """
         if end_date is None:
             end_dt = datetime.now()
         else:
@@ -242,14 +470,27 @@ class TickFlowCrawler(BaseCrawler):
         """
         获取股票K线数据
 
-        Args:
+        参数:
             stock_code: 股票代码（如 000001 或 000001.SZ）
             period: 时间周期（TickFlow支持 1d, 1w, 1M 等）
             start_date: 开始日期 (YYYY-MM-DD 或 YYYYMMDD)
             end_date: 结束日期 (YYYY-MM-DD 或 YYYYMMDD)
 
-        Returns:
-            pd.DataFrame: 股票数据
+        返回值:
+            pd.DataFrame: 标准化后的股票K线数据，失败返回空DataFrame
+
+        调用关系:
+            被调用: StockService.fetch_and_save_stock_data 等上层服务
+            调用: _rate_limiter.acquire/get_wait_time, _get_tickflow, get_full_symbol, _get_start_end_dates, _retry_fetch, _convert_to_standard_format
+
+        关键逻辑:
+            1. 检查TickFlow是否可用
+            2. 限流检查：获取令牌或等待
+            3. 将股票代码转换为完整代码
+            4. 解析并转换日期范围为毫秒时间戳
+            5. 调用TickFlow klines.get获取K线数据（带重试）
+            6. 将原始数据转换为项目标准格式
+            7. 异常时返回空DataFrame
         """
         logger.info(f"开始获取股票数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
 
@@ -318,7 +559,30 @@ class TickFlowCrawler(BaseCrawler):
             return pd.DataFrame()
 
     def _convert_to_standard_format(self, df: pd.DataFrame, stock_code: str, period: str) -> pd.DataFrame:
-        """将TickFlow返回的数据转换为项目标准格式"""
+        """
+        将TickFlow返回的数据转换为项目标准格式
+
+        参数:
+            df: TickFlow返回的原始DataFrame
+            stock_code: 原始股票代码（用于获取完整代码）
+            period: 时间周期
+
+        返回值:
+            pd.DataFrame: 符合项目标准格式的DataFrame
+
+        调用关系:
+            被调用: fetch_stock_data
+            调用: get_full_symbol, safe_float（内部函数）
+
+        关键逻辑:
+            1. 获取完整代码用于显示
+            2. 定义safe_float辅助函数处理None/NaN值
+            3. 遍历原始DataFrame每一行
+            4. 将毫秒时间戳转换为datetime对象
+            5. 提取open/high/low/close/volume/amount等字段
+            6. 组装为标准格式字典列表
+            7. 返回新的DataFrame
+        """
         result = []
 
         # 获取完整代码（带后缀）用于保存到数据库
@@ -360,7 +624,27 @@ class TickFlowCrawler(BaseCrawler):
         return pd.DataFrame(result)
 
     def fetch_realtime_data(self, stock_code: str) -> Dict:
-        """获取实时行情数据"""
+        """
+        获取实时行情数据
+
+        参数:
+            stock_code: 股票代码（短代码或完整代码）
+
+        返回值:
+            Dict: 实时行情数据字典，失败返回空字典
+
+        调用关系:
+            被调用: StockService等上层服务获取实时行情
+            调用: _get_tickflow, get_full_symbol, tf.quotes.get
+
+        关键逻辑:
+            1. 检查TickFlow是否可用
+            2. 获取TickFlow实例
+            3. 将股票代码转换为完整代码
+            4. 调用tf.quotes.get获取实时报价
+            5. 返回第一条报价数据
+            6. 异常时返回空字典
+        """
         if not self.available:
             return {}
 
@@ -382,7 +666,29 @@ class TickFlowCrawler(BaseCrawler):
             return {}
 
     def fetch_realtime_data_as_df(self, stock_code: str) -> pd.DataFrame:
-        """获取实时行情数据并转换为DataFrame格式（用于保存到数据库）"""
+        """
+        获取实时行情数据并转换为DataFrame格式（用于保存到数据库）
+
+        参数:
+            stock_code: 股票代码（短代码或完整代码）
+
+        返回值:
+            pd.DataFrame: 单条实时行情数据的标准格式DataFrame，失败返回空DataFrame
+
+        调用关系:
+            被调用: StockService.fetch_and_save_stock_data 当source="realtime"时调用
+            调用: _get_tickflow, get_full_symbol, tf.quotes.get
+
+        关键逻辑:
+            1. 检查TickFlow是否可用
+            2. 获取TickFlow实例
+            3. 将股票代码转换为完整代码
+            4. 调用tf.quotes.get获取实时报价
+            5. 提取报价中的价格字段（open/high/low/last_price/volume/amount）
+            6. 组装为与历史K线一致的标准格式
+            7. 使用当前日期作为datetime
+            8. 返回单条数据的DataFrame
+        """
         if not self.available:
             return pd.DataFrame()
 
@@ -440,7 +746,25 @@ class TickFlowCrawler(BaseCrawler):
             return pd.DataFrame()
 
     def fetch_stock_list(self) -> List[Dict]:
-        """获取股票列表（从universe获取）"""
+        """
+        获取股票列表（从universe获取）
+
+        参数:
+            无
+
+        返回值:
+            List[Dict]: 股票列表，每项包含code和name字段，限制前100条
+
+        调用关系:
+            被调用: 上层服务获取股票列表
+            调用: _load_universe_symbols
+
+        关键逻辑:
+            1. 加载universe symbols
+            2. 取前100条限制返回数量
+            3. 将完整代码拆分为短代码
+            4. 组装为字典列表返回
+        """
         self._load_universe_symbols()
 
         stocks = []
@@ -450,12 +774,46 @@ class TickFlowCrawler(BaseCrawler):
         return stocks
 
     def get_all_symbols(self) -> List[str]:
-        """获取所有A股完整代码列表"""
+        """
+        获取所有A股完整代码列表
+
+        参数:
+            无
+
+        返回值:
+            List[str]: 所有A股完整代码列表（如["000001.SZ", "600000.SH", ...]）
+
+        调用关系:
+            被调用: 上层服务获取全量代码
+            调用: _load_universe_symbols
+
+        关键逻辑:
+            1. 加载universe symbols
+            2. 返回缓存的完整代码列表
+        """
         self._load_universe_symbols()
         return self._universe_symbols
 
     def get_universe_symbols(self, universe_id: str) -> List[str]:
-        """获取指定 universe 的 symbols 列表"""
+        """
+        获取指定 universe 的 symbols 列表
+
+        参数:
+            universe_id: Universe标识符（如"CN_Equity_A"）
+
+        返回值:
+            List[str]: 指定universe的symbols列表，失败返回空列表
+
+        调用关系:
+            被调用: 上层服务按universe获取代码
+            调用: _get_tickflow, tf.universes.get
+
+        关键逻辑:
+            1. 获取TickFlow实例
+            2. 调用tf.universes.get(universe_id)获取universe数据
+            3. 提取symbols列表
+            4. 异常时返回空列表
+        """
         tf = self._get_tickflow()
         if not tf:
             return []
@@ -475,6 +833,22 @@ class TickFlowCrawler(BaseCrawler):
             return []
 
     def get_symbol_map(self) -> Dict[str, str]:
-        """获取股票代码映射表 {short_code: full_symbol}"""
+        """
+        获取股票代码映射表 {short_code: full_symbol}
+
+        参数:
+            无
+
+        返回值:
+            Dict[str, str]: 短代码到完整代码的映射字典副本
+
+        调用关系:
+            被调用: 上层服务需要代码映射时
+            调用: _load_universe_symbols
+
+        关键逻辑:
+            1. 加载universe symbols（若未加载）
+            2. 返回映射表的副本（避免外部修改）
+        """
         self._load_universe_symbols()
         return self._symbol_map.copy()
