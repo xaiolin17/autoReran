@@ -19,9 +19,10 @@
         </header>
 
         <div class="controls">
-            <div class="control-group">
+            <div class="control-group stock-code-search">
                 <label for="stockCode">股票/ETF代码</label>
-                <input type="text" id="stockCode" value="000001" placeholder="输入股票/ETF代码">
+                <input type="text" id="stockCode" value="000001.SH" placeholder="输入股票/ETF代码" autocomplete="off">
+                <div id="searchResults" class="search-results" style="display: none;"></div>
             </div>
             <div class="control-group">
                 <label for="startDate">开始日期</label>
@@ -33,7 +34,9 @@
             </div>
             <div class="control-group">
                 <button id="fetchBtn" class="btn btn-primary">获取数据</button>
-                <button id="refreshBtn" class="btn btn-secondary">🔄 刷新数据</button>
+            </div>
+            <div class="control-group">
+                <button id="forceRefreshBtn" class="btn btn-warning">⚡ 强制刷新历史数据</button>
             </div>
         </div>
 
@@ -53,7 +56,10 @@
 
         <div class="indicators-container">
             <div class="section-header">
-                <h2>K线与指标</h2>
+                <h2 id="chartTitle">K线与指标</h2>
+            </div>
+            <div class="chart-info-bar">
+                <span id="stockNameDisplay" class="stock-name-display"></span>
             </div>
             <div class="signal-toggle-container">
                 <label class="signal-toggle-label" for="signalToggle">
@@ -66,7 +72,10 @@
                 <button class="indicator-tab active" data-indicator="macd">MACD</button>
                 <button class="indicator-tab" data-indicator="kdj">KDJ</button>
             </div>
-            <div id="mainChart" class="main-chart"></div>
+            <div class="chart-wrapper">
+                <button id="refreshBtn" class="btn btn-secondary btn-sm chart-refresh-btn">🔄 刷新数据</button>
+                <div id="mainChart" class="main-chart"></div>
+            </div>
         </div>
 
         <div id="markPopupMenu" class="mark-popup-menu" style="display: none;">

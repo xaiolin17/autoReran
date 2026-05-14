@@ -143,12 +143,102 @@ function setupEventListeners() {
         refreshBtn.addEventListener('click', debounce(refreshData, 300));
     }
 
+    const forceRefreshBtn = document.getElementById('forceRefreshBtn');
+    if (forceRefreshBtn) {
+        forceRefreshBtn.addEventListener('click', debounce(forceRefreshData, 300));
+    }
+
+    // 股票代码输入框搜索
+    const stockCodeInput = document.getElementById('stockCode');
+    if (stockCodeInput) {
+        let searchTimeout = null;
+        stockCodeInput.addEventListener('input', (e) => {
+            const keyword = e.target.value.trim();
+            if (searchTimeout) clearTimeout(searchTimeout);
+            if (keyword.length >= 2) {
+                searchTimeout = setTimeout(() => searchStockCodes(keyword), 300);
+            } else {
+                hideSearchResults();
+            }
+        });
+        stockCodeInput.addEventListener('focus', (e) => {
+            const keyword = e.target.value.trim();
+            if (keyword.length >= 2) {
+                searchStockCodes(keyword);
+            }
+        });
+        // 点击外部隐藏搜索结果
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.stock-code-search')) {
+                hideSearchResults();
+            }
+        });
+    }
+
     const closeBtn = document.getElementById('closeProgressBox');
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             document.getElementById('progressBox').style.display = 'none';
         });
     }
+}
+
+async function searchStockCodes(keyword) {
+    try {
+        const response = await fetch(`/api/v1/stocks/search?keyword=${encodeURIComponent(keyword)}&limit=20`);
+        if (!response.ok) return;
+        const data = await response.json();
+        showSearchResults(data.results || []);
+    } catch (error) {
+        console.error('搜索股票代码失败:', error);
+    }
+}
+
+function showSearchResults(results) {
+    const container = document.getElementById('searchResults');
+    if (!container) return;
+
+    if (results.length === 0) {
+        container.innerHTML = '<div class="search-no-results">无匹配结果</div>';
+        container.style.display = 'block';
+        return;
+    }
+
+    const categoryLabels = {
+        'stock': 'A股',
+        'index': '指数',
+        'futures': '期货',
+        'bond': '债券',
+        'hk_stock': '港股',
+        'us_stock': '美股'
+    };
+
+    container.innerHTML = results.map(r => `
+        <div class="search-result-item" data-code="${r.name}">
+            <div>
+                <span class="search-result-code">${r.code}</span>
+                <span class="search-result-full">${r.name}</span>
+            </div>
+            <span class="search-result-category">${categoryLabels[r.category] || r.category}</span>
+        </div>
+    `).join('');
+
+    // 绑定点击事件
+    container.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const code = item.dataset.code;
+            document.getElementById('stockCode').value = code;
+            hideSearchResults();
+            loadData();
+        });
+    });
+
+    container.style.display = 'block';
+}
+
+function hideSearchResults() {
+    const container = document.getElementById('searchResults');
+    if (container) container.style.display = 'none';
 }
 
 function initIndicatorTabs() {
@@ -286,6 +376,36 @@ async function refreshData() {
     }
 }
 
+async function forceRefreshData() {
+    const stockCode = document.getElementById('stockCode').value.trim();
+
+    if (!stockCode) {
+        showMessage('请先输入股票代码！', 'warning');
+        return;
+    }
+
+    // 确认对话框
+    if (!confirm(`确定要强制刷新 ${stockCode} 的历史数据吗？\n将下载完整历史数据并对比更新数据库。`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/v1/stocks/force-refresh/${stockCode}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+        showMessage(result.message, 'info');
+
+    } catch (error) {
+        console.error('强制刷新失败:', error);
+        showMessage('强制刷新失败: ' + error.message, 'error');
+    }
+}
+
 function safeFetch(url, options = {}) {
     const cacheKey = `${options.method || 'GET'}_${url}`;
     const cached = getCachedData(cacheKey);
@@ -334,11 +454,21 @@ function setCachedData(key, data) {
     dataCache.set(key, { data, timestamp: Date.now() });
 }
 
+// 全局消息计数器，用于计算偏移位置
+let messageOffsetIndex = 0;
+const activeMessages = new Set();
+
 function showMessage(message, type = 'info') {
     const msgDiv = document.createElement('div');
+    const offsetIndex = messageOffsetIndex++;
+    activeMessages.add(msgDiv);
+
+    // 计算垂直偏移：每个消息框向下偏移一定距离
+    const topOffset = 24 + offsetIndex * 70;
+
     msgDiv.style.cssText = `
         position: fixed;
-        top: 24px;
+        top: ${topOffset}px;
         right: 24px;
         padding: 16px 24px;
         background: ${type === 'success' ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(34, 197, 94, 0.85))' :
@@ -358,8 +488,21 @@ function showMessage(message, type = 'info') {
 
     setTimeout(() => {
         msgDiv.style.animation = 'slideOut 0.4s ease';
-        setTimeout(() => msgDiv.remove(), 400);
+        setTimeout(() => {
+            msgDiv.remove();
+            activeMessages.delete(msgDiv);
+            // 重新排列剩余的消息框
+            rearrangeMessages();
+        }, 400);
     }, 3500);
+}
+
+function rearrangeMessages() {
+    const messages = Array.from(activeMessages);
+    messages.forEach((msg, index) => {
+        msg.style.top = `${24 + index * 70}px`;
+    });
+    messageOffsetIndex = messages.length;
 }
 
 function calculateMA(dayCount, data) {
@@ -413,9 +556,23 @@ function initChart() {
 
         mainChart.setOption(emptyOption);
 
+        // 支持左键点击和右键点击打开标记菜单
         mainChart.on('click', (params) => {
             if (params.componentType === 'series' && params.seriesName === 'K线') {
                 showMarkPopupMenu(params);
+            }
+        });
+
+        // 右键菜单
+        mainChart.getZr().on('contextmenu', (event) => {
+            event.event.preventDefault();
+            const point = [event.offsetX, event.offsetY];
+            const dataIndex = mainChart.convertFromPixel({ seriesIndex: 0 }, point);
+            if (dataIndex != null && currentData && currentData[dataIndex]) {
+                showMarkPopupMenu({
+                    dataIndex: dataIndex,
+                    event: { event: { clientX: event.event.clientX, clientY: event.event.clientY } }
+                });
             }
         });
     }
@@ -471,6 +628,18 @@ async function loadData() {
 
         let response = await safeFetch(url);
 
+        // 更新股票名称显示 (代码 + 名称) - 尽早更新，不受后续逻辑影响
+        const stockNameDisplay = document.getElementById('stockNameDisplay');
+        if (stockNameDisplay) {
+            const stockCodeVal = document.getElementById('stockCode').value.trim();
+            const stockName = response.stock_name || '';
+            if (stockName) {
+                stockNameDisplay.textContent = `${stockCodeVal} · ${stockName}`;
+            } else {
+                stockNameDisplay.textContent = stockCodeVal;
+            }
+        }
+
         // 处理新返回结构: {data, missing_ranges} 或 旧数组
         let data, missingRanges = [];
         if (Array.isArray(response)) {
@@ -487,7 +656,7 @@ async function loadData() {
             const today = new Date().toISOString().split('T')[0];
 
             showMessage('检测到数据缺失，后台下载中...', 'info');
-            
+
             // 显示进度框
             const progressBox = document.getElementById('progressBox');
             const fill = document.getElementById('progressBoxFill');
@@ -539,7 +708,7 @@ async function loadData() {
             updateCharts(data);
             showMessage(`成功加载 ${data.length} 条数据！`, 'success');
         } else {
-            showMessage('暂无数据，请确保已安装相关数据源库（akshare）或尝试其他股票', 'warning');
+            showMessage('暂无数据，请确保已配置 TickFlow API Key 或尝试其他股票', 'warning');
         }
     } catch (error) {
         console.error('加载数据失败:', error);
@@ -745,7 +914,8 @@ function updateCharts(data) {
         ]
     };
 
-    if (showSignalToggle && marks.size > 0) {
+    // 渲染用户标记（始终显示，不依赖交易信号开关）
+    if (marks.size > 0) {
         const markSeriesData = [];
         marks.forEach((mark, index) => {
             if (index < sortedData.length) {
@@ -754,31 +924,40 @@ function updateCharts(data) {
                 markSeriesData.push({
                     name: isBuy ? '买入' : '卖出',
                     value: [index, isBuy ? d.low_price : d.high_price],
-                    symbol: 'triangle',
-                    symbolSize: 12,
+                    symbol: isBuy ? 'triangle' : 'triangle',
+                    symbolRotate: isBuy ? 0 : 180,
+                    symbolSize: 14,
                     itemStyle: {
-                        color: isBuy ? '#22c55e' : '#ef4444'
+                        color: isBuy ? '#22c55e' : '#ef4444',
+                        borderWidth: 2,
+                        borderColor: isBuy ? '#22c55e' : '#ef4444'
                     },
                     label: {
                         show: true,
                         formatter: isBuy ? '买' : '卖',
                         position: isBuy ? 'bottom' : 'top',
-                        fontSize: 10,
+                        fontSize: 11,
                         color: isBuy ? '#22c55e' : '#ef4444',
-                        fontWeight: 'bold'
+                        fontWeight: 'bold',
+                        distance: 5
                     }
                 });
             }
         });
 
-        option.series.push({
-            name: '标记',
-            type: 'scatter',
-            xAxisIndex: 0,
-            yAxisIndex: 0,
-            data: markSeriesData,
-            zlevel: 3
-        });
+        if (markSeriesData.length > 0) {
+            option.series.push({
+                name: '标记',
+                type: 'scatter',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                data: markSeriesData,
+                zlevel: 10,
+                emphasis: {
+                    scale: 1.5
+                }
+            });
+        }
     }
 
     mainChart.setOption(option, true);

@@ -63,8 +63,9 @@ class StockCode(Base):
     __tablename__ = "stock_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(20), unique=True, index=True, nullable=False)
-    name = Column(String(100))
+    code = Column(String(20), index=True, nullable=False)  # 短代码（如 000001）
+    name = Column(String(100), unique=True, index=True, nullable=False)  # 完整代码（如 000001.SZ）
+    category = Column(String(50))  # 类别：stock/index/futures/bond 等
     updated_at = Column(DateTime, nullable=False)
 
     def __repr__(self):

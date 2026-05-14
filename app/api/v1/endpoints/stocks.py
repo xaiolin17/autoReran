@@ -37,7 +37,22 @@ def create_stock_data(stock_data: StockDataCreate, db: Session = Depends(get_db)
 
 
 # ============================================================
-# 2. 标记相关接口 (使用查询参数，避免 path parameter 冲突)
+# 2. 股票代码搜索接口 (模糊查询)
+# ============================================================
+@router.get("/search")
+def search_stocks(
+    keyword: str,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """模糊查询股票代码，返回匹配的代码列表"""
+    service = StockService(db)
+    results = service.search_stock_codes(keyword, limit=limit)
+    return {"results": results, "count": len(results)}
+
+
+# ============================================================
+# 3. 标记相关接口 (使用查询参数，避免 path parameter 冲突)
 # ============================================================
 class MarkUpdateV2(BaseModel):
     stock_code: str
@@ -51,6 +66,13 @@ def get_marks(
     period: str = "1d",
     db: Session = Depends(get_db)
 ):
+    from app.models.stock_data import StockCode
+    # 将短代码转换为完整代码
+    if '.' not in stock_code:
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
+        if code_record:
+            stock_code = code_record.name
+
     marks = db.query(StockDataModel).filter(
         StockDataModel.stock_code == stock_code,
         StockDataModel.period == period,
@@ -82,8 +104,15 @@ def update_mark(
 
     next_date = target_date + timedelta(days=1)
 
+    stock_code = mark_data.stock_code
+    from app.models.stock_data import StockCode
+    if '.' not in stock_code:
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
+        if code_record:
+            stock_code = code_record.name
+
     record = db.query(StockDataModel).filter(
-        StockDataModel.stock_code == mark_data.stock_code,
+        StockDataModel.stock_code == stock_code,
         StockDataModel.period == period,
         StockDataModel.datetime >= target_date,
         StockDataModel.datetime < next_date
@@ -192,6 +221,46 @@ def refresh_stock_data(
     }
 
 
+@router.post("/force-refresh/{stock_code}")
+def force_refresh_stock_data(
+    stock_code: str,
+    period: str = "1d",
+    db: Session = Depends(get_db)
+):
+    """强制刷新历史数据：下载完整历史数据，对比更新数据库（下载数据为空则不更新该字段）"""
+
+    # 启动后台任务重新下载并对比更新
+    thread = threading.Thread(
+        target=_run_force_refresh_task,
+        args=(stock_code, period),
+        daemon=True
+    )
+    thread.start()
+
+    return {
+        "message": "开始强制刷新历史数据，将下载完整数据并对比更新",
+        "stock_code": stock_code,
+        "period": period
+    }
+
+
+@router.post("/deduplicate/{stock_code}")
+def deduplicate_stock_data(
+    stock_code: str,
+    period: str = "1d",
+    db: Session = Depends(get_db)
+):
+    """手动清理指定股票代码和周期的重复数据，保留最早插入的记录"""
+    service = StockService(db)
+    deleted_count = service.deduplicate_stock_data(stock_code, period)
+    return {
+        "message": f"已清理 {deleted_count} 条重复数据" if deleted_count > 0 else "没有重复数据",
+        "stock_code": stock_code,
+        "period": period,
+        "deleted_count": deleted_count
+    }
+
+
 # ============================================================
 # 3. 泛化路由 /{stock_code} - 必须放在最后！
 # ============================================================
@@ -215,6 +284,7 @@ def _send_progress_ws(stock_code: str, status: str, progress: int, message: str,
     """Thread-safe WebSocket progress notification"""
     logger.debug(f"发送WebSocket进度通知: stock_code={stock_code}, status={status}, progress={progress}, message={message}")
     import asyncio
+    from app.core.websocket_manager import manager
 
     async def _broadcast():
         logger.debug(f"开始广播WebSocket消息到realtime频道")
@@ -230,13 +300,20 @@ def _send_progress_ws(stock_code: str, status: str, progress: int, message: str,
         }, channel="realtime")
 
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # 检查当前是否有运行的事件循环
         try:
+            loop = asyncio.get_running_loop()
+            # 在当前事件循环中调度任务
+            future = asyncio.run_coroutine_threadsafe(_broadcast(), loop)
+            # 等待任务完成
+            future.result(timeout=5.0)  # 5秒超时
+        except RuntimeError:
+            # 没有运行的事件循环，创建新的
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             loop.run_until_complete(_broadcast())
-            logger.debug(f"WebSocket进度通知发送成功: {message}")
-        finally:
             loop.close()
+        logger.debug(f"WebSocket进度通知发送成功: {message}")
     except Exception as e:
         logger.warning(f"WebSocket进度通知发送失败: {str(e)}")
         pass  # Silently ignore WebSocket errors
@@ -254,7 +331,7 @@ def _run_fetch_task(stock_code: str, period: str, start_date: Optional[str] = No
         indicator_service = IndicatorService(db)
 
         logger.debug(f"发送下载开始进度通知")
-        _send_progress_ws(stock_code, "downloading", 10, "正在从 AkShare 获取数据...")
+        _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
         logger.debug(f"开始获取并保存股票数据")
         saved_data = service.fetch_and_save_stock_data(
@@ -287,7 +364,7 @@ def _run_refresh_task(stock_code: str, period: str, start_date: Optional[str] = 
         service = StockService(db)
         indicator_service = IndicatorService(db)
 
-        _send_progress_ws(stock_code, "downloading", 10, "正在从 AkShare 获取数据...")
+        _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
         saved_data = service.fetch_and_save_stock_data(
             stock_code, period, start_date=start_date, incremental=True
@@ -301,5 +378,37 @@ def _run_refresh_task(stock_code: str, period: str, start_date: Optional[str] = 
             _send_progress_ws(stock_code, "completed", 100, "已是最新数据，无需更新", False)
     except Exception as e:
         _send_progress_ws(stock_code, "error", 0, f"刷新失败: {str(e)}")
+    finally:
+        db.close()
+
+
+def _run_force_refresh_task(stock_code: str, period: str):
+    """强制刷新任务：下载完整历史数据并对比更新"""
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        service = StockService(db)
+        indicator_service = IndicatorService(db)
+
+        _send_progress_ws(stock_code, "downloading", 10, "正在强制刷新，从 TickFlow 获取完整历史数据...")
+
+        # 强制刷新：获取过去2年的完整历史数据，force=True 表示对比更新所有数据
+        from datetime import datetime, timedelta
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
+
+        saved_data = service.fetch_and_save_stock_data(
+            stock_code, period, start_date=start_date, end_date=end_date, incremental=False, force=True
+        )
+
+        if saved_data:
+            _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")
+            indicator_service.calculate_and_save_indicators(stock_code, period)
+            _send_progress_ws(stock_code, "completed", 100, f"强制刷新完成，共处理 {len(saved_data)} 条数据", True)
+        else:
+            _send_progress_ws(stock_code, "completed", 100, "强制刷新完成，无数据更新", False)
+    except Exception as e:
+        _send_progress_ws(stock_code, "error", 0, f"强制刷新失败: {str(e)}")
     finally:
         db.close()

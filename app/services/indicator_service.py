@@ -1,8 +1,30 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta, date
 import pandas as pd
 from app.utils.technical_indicators import TechnicalIndicators
 from app.core.logger import log_function_call, logger
+
+# 尝试导入 exchange_calendars 进行精确交易日判断
+try:
+    import exchange_calendars as ec
+    _xshg_calendar = ec.get_calendar('XSHG')
+    _HAS_EXCHANGE_CALENDARS = True
+except Exception:
+    _xshg_calendar = None
+    _HAS_EXCHANGE_CALENDARS = False
+
+
+def _is_trading_day(dt: date) -> bool:
+    """判断是否为A股交易日（使用 exchange_calendars 精确判断）"""
+    if _HAS_EXCHANGE_CALENDARS and _xshg_calendar is not None:
+        try:
+            return _xshg_calendar.is_session(pd.Timestamp(dt))
+        except Exception:
+            pass
+
+    # fallback: 只排除周末
+    return dt.weekday() < 5
 
 
 class IndicatorService:
@@ -133,7 +155,7 @@ class IndicatorService:
             result.append(item)
         return result
     
-    @log_function_call
+    @log_function_call()
     def get_stock_data_with_indicators(
         self,
         stock_code: str,
@@ -145,7 +167,7 @@ class IndicatorService:
     ) -> Dict[str, Any]:
         """
         获取股票数据及技术指标
-        
+
         Args:
             stock_code: 股票代码
             period: 时间周期（如 1d, 1h, 1w, 1M）
@@ -153,15 +175,29 @@ class IndicatorService:
             end_date: 结束日期
             limit: 返回数据条数限制
             auto_save: 是否自动保存计算结果到数据库
-        
+
         Returns:
             Dict: 包含股票数据和缺失范围信息
         """
-        logger.info(f"开始获取股票指标数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}, limit={limit}")
-        
+        # 将短代码转换为完整代码（如 000001 -> 000001.SZ）
+        from app.models.stock_data import StockCode
+        full_symbol = None
+        if '.' not in stock_code:
+            # 查询完整代码
+            code_record = self.db.query(StockCode).filter(StockCode.code == stock_code).first()
+            if code_record:
+                full_symbol = code_record.name
+        if not full_symbol:
+            full_symbol = stock_code
+
+        logger.info(f"开始获取股票指标数据: stock_code={stock_code}(完整代码:{full_symbol}), period={period}, start_date={start_date}, end_date={end_date}, limit={limit}")
+
         from app.models.stock_data import StockData
         from sqlalchemy import desc
         from datetime import datetime, timedelta
+
+        # 使用完整代码查询数据库
+        stock_code = full_symbol
 
         # 检查是否需要下载数据
         missing_ranges = []
@@ -371,70 +407,111 @@ class IndicatorService:
         return signals
     
     def _detect_missing_ranges(self, stock_data_list, req_start, req_end):
-        """检测数据中的缺失范围"""
+        """检测数据中的缺失范围（只检查交易日，当天缺失用实时接口）"""
         from datetime import timedelta
         from datetime import date
-        
+
         logger.debug(f"开始检测缺失数据范围: 请求范围 {req_start.date()} ~ {req_end.date()}, 数据条数={len(stock_data_list) if stock_data_list else 0}")
-        
+
         missing_ranges = []
-        
+        today = date.today()
+
         if not stock_data_list:
             logger.info(f"数据列表为空，整个范围缺失: {req_start.date()} ~ {req_end.date()}")
             # 如果完全没有数据，整个范围都缺失
-            missing_ranges.append({
-                "start": req_start.strftime("%Y-%m-%d"),
-                "end": req_end.strftime("%Y-%m-%d")
-            })
+            # 但如果范围包含今天，将今天之前的部分和今天分开处理
+            if req_end.date() >= today and req_start.date() < today:
+                # 今天之前有缺失，用历史接口
+                missing_ranges.append({
+                    "start": req_start.strftime("%Y-%m-%d"),
+                    "end": (today - timedelta(days=1)).strftime("%Y-%m-%d")
+                })
+                # 今天单独标记为实时接口
+                if _is_trading_day(today):
+                    missing_ranges.append({
+                        "start": today.strftime("%Y-%m-%d"),
+                        "end": today.strftime("%Y-%m-%d"),
+                        "source": "realtime"
+                    })
+            else:
+                missing_ranges.append({
+                    "start": req_start.strftime("%Y-%m-%d"),
+                    "end": req_end.strftime("%Y-%m-%d")
+                })
             logger.debug(f"标记缺失范围: {missing_ranges}")
             return missing_ranges
-        
+
         # 创建日期集合以便快速查找
         existing_dates = set()
         for stock in stock_data_list:
             existing_dates.add(stock.datetime.date())
-        
+
         logger.debug(f"已存在的日期数量: {len(existing_dates)}")
-        
-        # 检查请求范围内的每一天是否存在
+
+        # 检查请求范围内的每个交易日是否存在
         current_date = req_start.date()
         while current_date <= req_end.date():
-            # 检查当前日期是否在未来，如果是则跳过（因为无法获取未来数据）
-            if current_date > date.today():
-                logger.debug(f"跳过未来日期: {current_date}")
+            # 检查当前日期是否在未来，如果是则跳过
+            if current_date > today:
                 current_date += timedelta(days=1)
                 continue
-                
+
+            # 跳过非交易日（周末）
+            if not _is_trading_day(current_date):
+                current_date += timedelta(days=1)
+                continue
+
             if current_date not in existing_dates:
                 logger.debug(f"检测到缺失日期: {current_date}")
                 # 找到缺失的起始日期，继续找到连续缺失的结束日期
                 missing_start = current_date
-                
-                # 查找连续缺失的日期范围，跳过未来的日期
+
+                # 查找连续缺失的日期范围，跳过未来日期和非交易日
                 while current_date <= req_end.date() and current_date not in existing_dates:
-                    if current_date > date.today():
-                        # 如果遇到未来日期，停止在这个缺失段的查找
+                    if current_date > today:
                         break
                     current_date += timedelta(days=1)
-                
-                if missing_start < current_date:  # 确保我们找到了至少一个非未来的缺失日期
-                    missing_end = min(current_date - timedelta(days=1), date.today())
-                    
+
+                if missing_start < current_date:
+                    missing_end = min(current_date - timedelta(days=1), today)
+
                     # 只有当缺失范围在今天或之前时才添加
-                    if missing_start <= date.today():
-                        missing_range = {
-                            "start": missing_start.strftime("%Y-%m-%d"),
-                            "end": missing_end.strftime("%Y-%m-%d")
-                        }
-                        missing_ranges.append(missing_range)
-                        logger.info(f"检测到缺失范围: {missing_range['start']} ~ {missing_range['end']}")
-                
+                    if missing_start <= today:
+                        # 如果缺失范围包含今天，将今天之前的部分和今天分开
+                        if missing_end >= today and missing_start < today:
+                            # 今天之前的部分用历史接口
+                            missing_ranges.append({
+                                "start": missing_start.strftime("%Y-%m-%d"),
+                                "end": (today - timedelta(days=1)).strftime("%Y-%m-%d")
+                            })
+                            # 今天单独标记为实时接口
+                            missing_ranges.append({
+                                "start": today.strftime("%Y-%m-%d"),
+                                "end": today.strftime("%Y-%m-%d"),
+                                "source": "realtime"
+                            })
+                        elif missing_start == today and missing_end == today:
+                            # 只有今天缺失，用实时接口
+                            missing_ranges.append({
+                                "start": today.strftime("%Y-%m-%d"),
+                                "end": today.strftime("%Y-%m-%d"),
+                                "source": "realtime"
+                            })
+                        else:
+                            # 不包含今天，用历史接口
+                            missing_range = {
+                                "start": missing_start.strftime("%Y-%m-%d"),
+                                "end": missing_end.strftime("%Y-%m-%d")
+                            }
+                            missing_ranges.append(missing_range)
+                        logger.info(f"检测到缺失范围: {missing_start} ~ {missing_end}")
+
                 # 如果刚好到达循环条件，跳出循环
                 if current_date > req_end.date():
                     break
             else:
                 current_date += timedelta(days=1)
-        
+
         logger.debug(f"缺失范围检测完成，总计 {len(missing_ranges)} 个范围: {missing_ranges}")
         return missing_ranges
     

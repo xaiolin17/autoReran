@@ -56,22 +56,32 @@ class DataProcessor:
     def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:
             return df
-        
+
         required_cols = ['open_price', 'high_price', 'low_price', 'close_price', 'volume']
         available_cols = [col for col in required_cols if col in df.columns]
-        
+
         if len(available_cols) < len(required_cols):
             df = df.dropna(subset=available_cols)
         else:
             df = df.dropna(subset=required_cols)
-        
+
         df = df[df['volume'] >= 0]
         df = df[df['high_price'] >= df['low_price']]
         df = df[df['high_price'] >= df['open_price']]
         df = df[df['high_price'] >= df['close_price']]
         df = df[df['low_price'] <= df['open_price']]
         df = df[df['low_price'] <= df['close_price']]
-        
+
+        # 去除重复数据：按 stock_code + period + datetime 去重，保留第一条
+        dup_cols = ['stock_code', 'period', 'datetime']
+        dup_cols_available = [col for col in dup_cols if col in df.columns]
+        if len(dup_cols_available) >= 2:
+            before_dedup = len(df)
+            df = df.drop_duplicates(subset=dup_cols_available, keep='first')
+            after_dedup = len(df)
+            if before_dedup != after_dedup:
+                print(f"[DataProcessor] 去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
+
         df = df.sort_values('datetime').reset_index(drop=True)
         return df
     
@@ -117,6 +127,6 @@ class DataProcessor:
                             days: int = 365, base_price: float = 100.0) -> pd.DataFrame:
         """不使用模拟数据，抛出异常"""
         raise RuntimeError(
-            f"模拟数据已禁用，请确保 Akshare 可用或从数据库加载数据。"
+            f"模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。"
             f"股票代码: {stock_code}"
         )

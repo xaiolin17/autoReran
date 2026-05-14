@@ -222,13 +222,46 @@ input::placeholder {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 8px;
 }
 
 .section-header h2 {
     font-size: 20px;
     font-weight: 600;
     letter-spacing: -0.3px;
+}
+
+.chart-info-bar {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.stock-name-display {
+    font-size: 16px;
+    color: var(--accent-cyan);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 6px 20px;
+    font-weight: 600;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.chart-wrapper {
+    position: relative;
+}
+
+.chart-refresh-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
 }
 
 .main-chart {
@@ -905,24 +938,83 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .btn-warning {
     background: linear-gradient(135deg, #F59E0B, #D97706);
     color: white;
-    padding: 10px 20px;
-    border-radius: 10px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    display: inline-block;
-    transition: all 0.2s ease;
+    box-shadow: 0 8px 32px rgba(245, 158, 11, 0.25);
 }
 
 .btn-warning:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.3);
+    box-shadow: 0 12px 48px rgba(245, 158, 11, 0.35);
 }
 
 .help-text {
     color: var(--text-muted);
     font-size: 12px;
     margin: 8px 0 0 0;
+}
+
+/* 股票代码搜索下拉框 */
+.stock-code-search {
+    position: relative;
+}
+
+.search-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(var(--blur-glass));
+}
+
+.search-result-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+    transition: background 0.15s ease;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.search-result-code {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.search-result-full {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.search-result-category {
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--accent-cyan);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.search-no-results {
+    padding: 16px;
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 14px;
 }
 
 @media (max-width: 1024px) {

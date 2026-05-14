@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     SINA_STOCK_URL: str = "http://hq.sinajs.cn/list="
     EASTMONEY_URL: str = "http://push2.eastmoney.com/api/qt/stock/kline/get"
 
+    # TickFlow配置
+    TICKFLOW_API_KEY: Optional[str] = None
+
     class Config:
         env_file = ".env"
 

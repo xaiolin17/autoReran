@@ -77,6 +77,13 @@ def check_labeled_data(
     db: Session = Depends(get_db)
 ):
     """检查指定股票是否有已标记的买入/卖出数据"""
+    from app.models.stock_data import StockCode
+    # 将短代码转换为完整代码
+    if '.' not in stock_code:
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
+        if code_record:
+            stock_code = code_record.name
+
     count = db.query(StockData).filter(
         StockData.stock_code == stock_code,
         StockData.label.isnot(None)
