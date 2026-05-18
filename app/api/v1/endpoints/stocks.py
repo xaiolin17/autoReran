@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import threading
 from app.core.database import get_db
 from app.schemas.stock import StockData, StockDataCreate
@@ -748,9 +748,19 @@ def _run_force_refresh_task(stock_code: str, period: str):
         _send_progress_ws(stock_code, "downloading", 10, "正在强制刷新，从 TickFlow 获取完整历史数据...")
 
         # 强制刷新：获取过去2年的完整历史数据，force=True 表示对比更新所有数据
-        from datetime import datetime, timedelta
-        end_date = datetime.now().strftime("%Y%m%d")
-        start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
+        # 将日期范围对齐到交易日，避免请求非交易日的数据
+        try:
+            import exchange_calendars as ec
+            calendar = ec.get_calendar('XSHG')
+            today = date.today()
+            start_dt = today - timedelta(days=730)
+            # 找到最近的交易日
+            end_date = calendar.session_offset(today, 0).strftime("%Y%m%d")
+            start_date = calendar.session_offset(start_dt, 0).strftime("%Y%m%d")
+        except Exception:
+            # fallback: 不使用交易日对齐
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
 
         saved_data = service.fetch_and_save_stock_data(
             stock_code, period, start_date=start_date, end_date=end_date, incremental=False, force=True

@@ -155,6 +155,36 @@ class DataProcessor:
             if before_dedup != after_dedup:
                 print(f"[DataProcessor] 去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
 
+        # 修正日期：将所有非交易日的数据日期修正为向前最近的交易日
+        if 'datetime' in df.columns:
+            from app.services.indicator_service import _fix_trading_date
+            original_dates = df['datetime'].copy()
+            df['datetime'] = df['datetime'].apply(lambda x: _fix_trading_date(x) if pd.notna(x) else x)
+            # 记录修正的日期
+            for i in range(len(df)):
+                orig = original_dates.iloc[i]
+                fixed = df['datetime'].iloc[i]
+                if pd.notna(orig) and pd.notna(fixed) and orig.date() != fixed.date():
+                    print(f"[DataProcessor] 日期修正: {orig.date()} -> {fixed.date()} (非交易日修正为最近交易日)")
+
+        # 按日期去重：同一天保留时间较晚的数据（16:00:00 优先于 00:00:00）
+        if 'datetime' in df.columns and not df.empty:
+            # 提取日期部分用于分组
+            df['_date'] = df['datetime'].dt.date
+
+            before_dedup = len(df)
+            # 按 stock_code + period + 日期分组，保留 datetime 最大的记录（时间较晚的）
+            df = df.sort_values('datetime').groupby(
+                ['stock_code', 'period', '_date'], as_index=False
+            ).last()
+            after_dedup = len(df)
+
+            # 删除临时列
+            df = df.drop(columns=['_date'])
+
+            if before_dedup != after_dedup:
+                print(f"[DataProcessor] 按日期去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
+
         df = df.sort_values('datetime').reset_index(drop=True)
         return df
     

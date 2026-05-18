@@ -444,11 +444,15 @@ class TickFlowCrawler(BaseCrawler):
             end_dt = datetime.now()
         else:
             end_dt = self._parse_date(end_date)
+            # 确保 end_date 包含当天全天（设置为当天 23:59:59）
+            end_dt = end_dt.replace(hour=23, minute=59, second=59)
 
         if start_date is None:
             start_dt = end_dt - timedelta(days=int(default_months * 30))
         else:
             start_dt = self._parse_date(start_date)
+            # 确保 start_date 从当天 00:00:00 开始
+            start_dt = start_dt.replace(hour=0, minute=0, second=0)
 
         if start_dt > end_dt:
             logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
@@ -551,6 +555,9 @@ class TickFlowCrawler(BaseCrawler):
             # 转换为项目标准格式
             result = self._convert_to_standard_format(df, stock_code, period)
             logger.info(f"获取数据完成: {len(result)} 条记录")
+            if not result.empty:
+                preview = result.head(5).to_string(index=False)
+                logger.info(f"数据预览(前5条):\n{preview}")
             return result
 
         except Exception as e:
@@ -596,6 +603,9 @@ class TickFlowCrawler(BaseCrawler):
             except (TypeError, ValueError):
                 return default
 
+        # 导入日期修正函数
+        from app.services.indicator_service import _fix_trading_date
+
         for _, row in df.iterrows():
             # TickFlow返回的列: timestamp/trade_date, open, high, low, close, volume, amount
             # 注意: timestamp 是毫秒时间戳
@@ -605,6 +615,12 @@ class TickFlowCrawler(BaseCrawler):
                 dt = pd.to_datetime(ts, unit='ms')
             else:
                 dt = pd.to_datetime(row.get('trade_date', ts))
+
+            # 修正日期：将非交易日的数据日期修正为向前最近的交易日
+            original_dt = dt
+            dt = _fix_trading_date(dt)
+            if original_dt.date() != dt.date():
+                logger.info(f"日期修正: {original_dt.date()} -> {dt.date()} (非交易日修正为最近交易日)")
 
             result.append({
                 'datetime': dt,
@@ -711,8 +727,12 @@ class TickFlowCrawler(BaseCrawler):
             # 获取完整代码用于显示
             display_code = full_symbol if full_symbol else stock_code
 
-            # 获取当前日期作为交易日期
-            today = datetime.now().date()
+            # 获取当前日期作为交易日期，并修正为最近的交易日
+            from app.services.indicator_service import _fix_trading_date
+            today = datetime.now()
+            fixed_today = _fix_trading_date(today)
+            if today.date() != fixed_today.date():
+                logger.info(f"实时数据日期修正: {today.date()} -> {fixed_today.date()} (非交易日修正为最近交易日)")
 
             # 安全获取数值字段，处理 None 的情况
             def safe_float(value, default=0.0):
@@ -724,7 +744,7 @@ class TickFlowCrawler(BaseCrawler):
                     return default
 
             result = {
-                'datetime': pd.Timestamp(today),
+                'datetime': pd.Timestamp(fixed_today.date()),
                 'open_price': safe_float(quote.get('open')),
                 'high_price': safe_float(quote.get('high')),
                 'low_price': safe_float(quote.get('low')),

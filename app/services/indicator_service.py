@@ -57,6 +57,83 @@ def _is_trading_day(dt: date) -> bool:
     return dt.weekday() < 5
 
 
+def _align_to_trading_day(dt: date, direction: str = "forward") -> date:
+    """
+    将给定日期对齐到最近的交易日。
+
+    功能：
+        如果给定日期本身就是交易日，则直接返回；
+        否则向前或向后查找最近的交易日。
+
+    参数：
+        dt (date): 需要对齐的日期。
+        direction (str): 查找方向，"forward" 表示向后找（日期增大），
+                         "backward" 表示向前找（日期减小）。
+
+    返回值：
+        date: 对齐后的交易日日期。如果找不到（如超出日历范围），返回原始日期。
+
+    调用关系：
+        被 _detect_missing_ranges 调用，用于将缺失范围边界对齐到交易日。
+    """
+    if _is_trading_day(dt):
+        return dt
+
+    delta = timedelta(days=1)
+    current = dt
+
+    # 最多查找30天，防止无限循环
+    for _ in range(30):
+        if direction == "forward":
+            current += delta
+        else:
+            current -= delta
+        if _is_trading_day(current):
+            return current
+
+    # 找不到则返回原始日期
+    return dt
+
+
+def _fix_trading_date(dt: datetime) -> datetime:
+    """
+    将给定日期时间修正为最近的交易日。
+
+    功能：
+        如果给定日期本身就是交易日，则直接返回；
+        否则向前（日期减小方向）查找最近的交易日，并返回修正后的日期时间。
+        时间部分保持不变，仅修正日期部分。
+
+    参数：
+        dt (datetime): 需要修正的日期时间对象。
+
+    返回值：
+        datetime: 修正后的日期时间对象，日期为最近的交易日，时间保持原样。
+
+    调用关系：
+        被 tickflow_crawler._convert_to_standard_format、
+        tickflow_crawler.fetch_realtime_data_as_df、
+        data_processor.clean_data、
+        stock_service.fetch_and_save_stock_data 调用，
+        用于修正可能错位的数据日期。
+
+    关键逻辑：
+        1. 提取日期部分，判断是否为交易日；
+        2. 如果是交易日，直接返回原日期时间；
+        3. 如果不是交易日，向前查找最近的交易日；
+        4. 将修正后的日期与原时间组合，返回新的 datetime 对象。
+    """
+    dt_date = dt.date()
+    if _is_trading_day(dt_date):
+        return dt
+
+    # 向前查找最近的交易日
+    fixed_date = _align_to_trading_day(dt_date, direction="backward")
+
+    # 组合修正后的日期和原时间
+    return datetime.combine(fixed_date, dt.time())
+
+
 class IndicatorService:
     """
     技术指标服务类。
@@ -447,21 +524,6 @@ class IndicatorService:
             logger.info(f"股票 {stock_code} 在数据库中无数据")
             return {"data": [], "missing_ranges": missing_ranges}
 
-        # 重新检测缺失范围 (可能还有未覆盖的范围)
-        if start_date and end_date:
-            req_start = datetime.strptime(start_date, "%Y-%m-%d")
-            req_end = datetime.strptime(end_date, "%Y-%m-%d")
-            
-            new_missing_ranges = self._detect_missing_ranges(
-                stock_data_list, req_start, req_end
-            )
-            if new_missing_ranges:
-                logger.debug(f"再次检测到缺失范围: {len(new_missing_ranges)} 个")
-                missing_ranges.extend(new_missing_ranges)
-                # 合并重复的范围
-                missing_ranges = self._merge_overlapping_ranges(missing_ranges)
-                logger.debug(f"合并后缺失范围总数: {len(missing_ranges)}")
-
         has_missing_indicators = False
         for stock in stock_data_list:
             if (stock.ma5 is None or stock.k is None or stock.macd is None):
@@ -725,13 +787,24 @@ class IndicatorService:
         if not stock_data_list:
             logger.info(f"数据列表为空，整个范围缺失: {req_start.date()} ~ {req_end.date()}")
             # 如果完全没有数据，整个范围都缺失
+            # 将范围边界对齐到交易日
+            aligned_start = _align_to_trading_day(req_start.date(), direction="forward")
+            aligned_end = _align_to_trading_day(req_end.date(), direction="backward")
+
+            # 如果对齐后范围无效（如整个范围都是非交易日），不生成缺失范围
+            if aligned_start > aligned_end or aligned_start > today:
+                logger.debug(f"对齐后范围无效，无缺失: aligned_start={aligned_start}, aligned_end={aligned_end}")
+                return missing_ranges
+
             # 但如果范围包含今天，将今天之前的部分和今天分开处理
-            if req_end.date() >= today and req_start.date() < today:
+            if aligned_end >= today and aligned_start < today:
                 # 今天之前有缺失，用历史接口
-                missing_ranges.append({
-                    "start": req_start.strftime("%Y-%m-%d"),
-                    "end": (today - timedelta(days=1)).strftime("%Y-%m-%d")
-                })
+                before_today = _align_to_trading_day(today - timedelta(days=1), direction="backward")
+                if aligned_start <= before_today:
+                    missing_ranges.append({
+                        "start": aligned_start.strftime("%Y-%m-%d"),
+                        "end": before_today.strftime("%Y-%m-%d")
+                    })
                 # 今天单独标记为实时接口
                 if _is_trading_day(today):
                     missing_ranges.append({
@@ -741,8 +814,8 @@ class IndicatorService:
                     })
             else:
                 missing_ranges.append({
-                    "start": req_start.strftime("%Y-%m-%d"),
-                    "end": req_end.strftime("%Y-%m-%d")
+                    "start": aligned_start.strftime("%Y-%m-%d"),
+                    "end": aligned_end.strftime("%Y-%m-%d")
                 })
             logger.debug(f"标记缺失范围: {missing_ranges}")
             return missing_ranges
@@ -753,6 +826,9 @@ class IndicatorService:
             existing_dates.add(stock.datetime.date())
 
         logger.debug(f"已存在的日期数量: {len(existing_dates)}")
+        if existing_dates:
+            sorted_dates = sorted(existing_dates)
+            logger.debug(f"已存在日期范围: {sorted_dates[0]} ~ {sorted_dates[-1]}, 具体日期: {sorted_dates}")
 
         # 检查请求范围内的每个交易日是否存在
         current_date = req_start.date()
@@ -781,36 +857,49 @@ class IndicatorService:
                 if missing_start < current_date:
                     missing_end = min(current_date - timedelta(days=1), today)
 
+                    # 将缺失范围边界对齐到交易日
+                    aligned_missing_start = _align_to_trading_day(missing_start, direction="forward")
+                    aligned_missing_end = _align_to_trading_day(missing_end, direction="backward")
+
+                    # 如果对齐后范围无效，跳过
+                    if aligned_missing_start > aligned_missing_end or aligned_missing_start > today:
+                        logger.debug(f"对齐后缺失范围无效，跳过: {missing_start} ~ {missing_end}")
+                        continue
+
                     # 只有当缺失范围在今天或之前时才添加
-                    if missing_start <= today:
+                    if aligned_missing_start <= today:
                         # 如果缺失范围包含今天，将今天之前的部分和今天分开
-                        if missing_end >= today and missing_start < today:
+                        if aligned_missing_end >= today and aligned_missing_start < today:
                             # 今天之前的部分用历史接口
-                            missing_ranges.append({
-                                "start": missing_start.strftime("%Y-%m-%d"),
-                                "end": (today - timedelta(days=1)).strftime("%Y-%m-%d")
-                            })
+                            before_today = _align_to_trading_day(today - timedelta(days=1), direction="backward")
+                            if aligned_missing_start <= before_today:
+                                missing_ranges.append({
+                                    "start": aligned_missing_start.strftime("%Y-%m-%d"),
+                                    "end": before_today.strftime("%Y-%m-%d")
+                                })
                             # 今天单独标记为实时接口
-                            missing_ranges.append({
-                                "start": today.strftime("%Y-%m-%d"),
-                                "end": today.strftime("%Y-%m-%d"),
-                                "source": "realtime"
-                            })
-                        elif missing_start == today and missing_end == today:
+                            if _is_trading_day(today):
+                                missing_ranges.append({
+                                    "start": today.strftime("%Y-%m-%d"),
+                                    "end": today.strftime("%Y-%m-%d"),
+                                    "source": "realtime"
+                                })
+                        elif aligned_missing_start == today and aligned_missing_end == today:
                             # 只有今天缺失，用实时接口
-                            missing_ranges.append({
-                                "start": today.strftime("%Y-%m-%d"),
-                                "end": today.strftime("%Y-%m-%d"),
-                                "source": "realtime"
-                            })
+                            if _is_trading_day(today):
+                                missing_ranges.append({
+                                    "start": today.strftime("%Y-%m-%d"),
+                                    "end": today.strftime("%Y-%m-%d"),
+                                    "source": "realtime"
+                                })
                         else:
                             # 不包含今天，用历史接口
                             missing_range = {
-                                "start": missing_start.strftime("%Y-%m-%d"),
-                                "end": missing_end.strftime("%Y-%m-%d")
+                                "start": aligned_missing_start.strftime("%Y-%m-%d"),
+                                "end": aligned_missing_end.strftime("%Y-%m-%d")
                             }
                             missing_ranges.append(missing_range)
-                        logger.info(f"检测到缺失范围: {missing_start} ~ {missing_end}")
+                        logger.info(f"检测到缺失范围: {aligned_missing_start} ~ {aligned_missing_end} (原始: {missing_start} ~ {missing_end})")
 
                 # 如果刚好到达循环条件，跳出循环
                 if current_date > req_end.date():

@@ -419,6 +419,27 @@ class StockService:
         updated_count = 0
         skipped_count = 0
 
+        # 最终日期修正：确保保存到数据库的日期都是交易日
+        from app.services.indicator_service import _fix_trading_date
+        for idx, row in cleaned_data.iterrows():
+            original_dt = row['datetime']
+            fixed_dt = _fix_trading_date(original_dt)
+            if original_dt.date() != fixed_dt.date():
+                logger.info(f"保存前日期修正: {original_dt.date()} -> {fixed_dt.date()} (非交易日修正为最近交易日)")
+                cleaned_data.at[idx, 'datetime'] = fixed_dt
+
+        # 按日期去重：同一天保留时间较晚的数据（16:00:00 优先于 00:00:00）
+        if not cleaned_data.empty and 'datetime' in cleaned_data.columns:
+            cleaned_data['_date'] = cleaned_data['datetime'].dt.date
+            before_dedup = len(cleaned_data)
+            cleaned_data = cleaned_data.sort_values('datetime').groupby(
+                ['stock_code', 'period', '_date'], as_index=False
+            ).last()
+            cleaned_data = cleaned_data.drop(columns=['_date'])
+            after_dedup = len(cleaned_data)
+            if before_dedup != after_dedup:
+                logger.info(f"按日期去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
+
         for _, row in cleaned_data.iterrows():
             existing = self.db.query(StockData).filter(
                 StockData.stock_code == row['stock_code'],
