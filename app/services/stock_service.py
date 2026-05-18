@@ -3,7 +3,7 @@ from sqlalchemy import desc
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 import pandas as pd
-from app.core.logger import logger, log_function_call
+from app.core.logger import logger
 from app.models.stock_data import StockData, StockCode
 from app.schemas.stock import StockDataCreate
 from app.crawlers.tickflow_crawler import TickFlowCrawler
@@ -318,7 +318,6 @@ class StockService:
         ).order_by(StockData.datetime).first()
         return earliest.datetime if earliest else None
     
-    @log_function_call()
     def fetch_and_save_stock_data(
         self,
         stock_code: str,

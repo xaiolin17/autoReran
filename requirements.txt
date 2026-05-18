@@ -4,7 +4,7 @@ uvicorn[standard]==0.41.0
 
 # Database
 sqlalchemy==2.0.42
-sqlalchemy-utils==0.42.0
+# sqlalchemy-utils==0.42.0  # 未安装，如需使用请取消注释
 # PostgreSQL (optional - uncomment if you need PostgreSQL)
 # psycopg2-binary==2.9.10
 # asyncpg==0.31.0
@@ -17,7 +17,7 @@ pydantic-settings==2.12.0
 pandas==3.0.1
 numpy==2.3.5
 scikit-learn==1.8.0
-ta==0.11.0
+# ta==0.11.0  # 未安装，如需使用请取消注释
 
 # Web & Scraping
 requests==2.32.5
@@ -28,6 +28,8 @@ httpx==0.28.1
 tickflow==0.1.21
 
 # 交易日历（A股节假日判断）
+# 用于精确判断A股交易日（排除节假日），缺失检测和下载任务依赖此库
+# 如果未安装，将降级为仅排除周末的简单判断
 exchange-calendars==4.13.2
 
 # Templating

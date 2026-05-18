@@ -10,7 +10,7 @@ from app.services.stock_service import StockService
 from app.services.indicator_service import IndicatorService
 from app.core.websocket_manager import manager
 from app.models.stock_data import StockData as StockDataModel
-from app.core.logger import log_api_call, logger
+from app.core.logger import logger
 
 router = APIRouter()
 
@@ -289,7 +289,6 @@ def fetch_and_save_stock_data(
 
 
 @router.post("/fetch-async/{stock_code}")
-@log_api_call
 def fetch_async(
     stock_code: str,
     period: str = "1d",

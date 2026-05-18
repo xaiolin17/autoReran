@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from collections import deque
 from app.crawlers.base import BaseCrawler
-from app.core.logger import logger, log_function_call
+from app.core.logger import logger
 from app.core.config import settings
 
 try:
@@ -459,7 +459,6 @@ class TickFlowCrawler(BaseCrawler):
         end_ms = int(end_dt.timestamp() * 1000)
         return start_ms, end_ms
 
-    @log_function_call()
     def fetch_stock_data(
         self,
         stock_code: str,

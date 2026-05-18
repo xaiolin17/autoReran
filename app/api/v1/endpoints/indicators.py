@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.services.indicator_service import IndicatorService
 from app.services.stock_service import StockService
-from app.core.logger import log_api_call, logger
+from app.core.logger import logger
 
 router = APIRouter()
 
@@ -15,7 +15,6 @@ task_status: Dict[str, Dict] = {}
 
 
 @router.get("/{stock_code}")
-@log_api_call
 def get_stock_data_with_indicators(
     stock_code: str,
     period: str = "1d",

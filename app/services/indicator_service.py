@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, date
 import pandas as pd
 from app.utils.technical_indicators import TechnicalIndicators
-from app.core.logger import log_function_call, logger
+from app.core.logger import logger
 
 # =============================================================================
 # 模块级全局变量说明
@@ -293,7 +293,6 @@ class IndicatorService:
             result.append(item)
         return result
     
-    @log_function_call()
     def get_stock_data_with_indicators(
         self,
         stock_code: str,
