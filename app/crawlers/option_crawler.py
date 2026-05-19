@@ -60,9 +60,7 @@ class OptionCrawler:
             # 尝试获取真实期权数据
             return self._fetch_real_option_data(stock_code)
         except Exception as e:
-            logger.error(
-                "获取真实期权数据错误: " + str(e), exc_info=True
-            )
+            logger.error("获取真实期权数据错误: " + str(e), exc_info=True)
             # 如果真实数据获取失败，提供空数据提示
             return self._get_fallback_data(stock_code)
 
@@ -88,9 +86,7 @@ class OptionCrawler:
                 option = OptionData(
                     option_code=code,
                     stock_code=stock_code,
-                    strike_price=data.get(
-                        "strike_price", underlying_price
-                    ),
+                    strike_price=data.get("strike_price", underlying_price),
                     expire_date=data.get(
                         "expire_date",
                         self._get_default_expire_date(),
@@ -137,17 +133,12 @@ class OptionCrawler:
             response = self.session.get(url, timeout=5)
             response.encoding = "gbk"
 
-            if (
-                response.status_code == 200
-                and "var hq_str" in response.text
-            ):
+            if response.status_code == 200 and "var hq_str" in response.text:
                 data = response.text.split('"')[1].split(",")
                 if len(data) >= 4:
                     return float(data[3])
         except Exception as e:
-            logger.error(
-                "获取标的价格失败: " + str(e), exc_info=True
-            )
+            logger.error("获取标的价格失败: " + str(e), exc_info=True)
 
         # 如果获取失败，返回一个合理的默认值
         default_prices = {
@@ -164,15 +155,10 @@ class OptionCrawler:
         # 这里我们使用东方财富的期权接口获取真实期权代码
         try:
             # 根据标的确定交易所
-            exchange = (
-                "sse" if stock_code.startswith("51") else "szse"
-            )
+            exchange = "sse" if stock_code.startswith("51") else "szse"
 
             # 获取期权链
-            url = (
-                "https://push2.eastmoney.com/api/qt/"
-                "official/stock/ls"
-            )
+            url = "https://push2.eastmoney.com/api/qt/" "official/stock/ls"
             params = {
                 "pn": 1,
                 "pz": 100,
@@ -193,25 +179,16 @@ class OptionCrawler:
                     codes = []
                     for item in data["data"]["diff"]:
                         name = item.get("f14", "")
-                        if (
-                            "购" in name
-                            or "沽" in name
-                            or "C" in name
-                            or "P" in name
-                        ):
+                        if "购" in name or "沽" in name or "C" in name or "P" in name:
                             codes.append(item.get("f12", ""))
                     return codes
         except Exception as e:
-            logger.error(
-                "获取期权代码列表失败: " + str(e), exc_info=True
-            )
+            logger.error("获取期权代码列表失败: " + str(e), exc_info=True)
 
         # 如果获取失败，返回一些常见期权代码
         return self._get_fallback_option_codes(stock_code)
 
-    def _get_option_quotes(
-        self, option_codes: List[str]
-    ) -> Dict[str, Dict]:
+    def _get_option_quotes(self, option_codes: List[str]) -> Dict[str, Dict]:
         """获取期权报价数据"""
         quotes = {}
 
@@ -222,30 +199,21 @@ class OptionCrawler:
             # 分批获取期权报价
             batch_size = 20
             for i in range(0, len(option_codes), batch_size):
-                batch = option_codes[i:i + batch_size]
+                batch = option_codes[i : i + batch_size]
 
                 for code in batch:
                     try:
                         # 构建secid
-                        secid = (
-                            "1." + code
-                            if code.startswith("1000")
-                            else "0." + code
-                        )
+                        secid = "1." + code if code.startswith("1000") else "0." + code
 
-                        url = (
-                            "https://push2.eastmoney.com/api/qt/"
-                            "stock/details/get"
-                        )
+                        url = "https://push2.eastmoney.com/api/qt/" "stock/details/get"
                         params = {
                             "secid": secid,
                             "fields1": _EM_STOCK_DETAILS_FIELDS,
                             "_": int(datetime.now().timestamp()),
                         }
 
-                        response = self.session.get(
-                            url, params=params, timeout=5
-                        )
+                        response = self.session.get(url, params=params, timeout=5)
                         if response.status_code == 200:
                             data = response.json()
                             if data.get("data"):
@@ -254,25 +222,13 @@ class OptionCrawler:
                                     "latest_price": d.get("f2", 0) or 0,
                                     "bid_price": d.get("f19", 0) or 0,
                                     "ask_price": d.get("f17", 0) or 0,
-                                    "bid_volume": int(
-                                        d.get("f20", 0) or 0
-                                    ),
-                                    "ask_volume": int(
-                                        d.get("f18", 0) or 0
-                                    ),
+                                    "bid_volume": int(d.get("f20", 0) or 0),
+                                    "ask_volume": int(d.get("f18", 0) or 0),
                                     "volume": int(d.get("f5", 0) or 0),
-                                    "open_interest": int(
-                                        d.get("f8", 0) or 0
-                                    ),
-                                    "change_percent": (
-                                        d.get("f4", 0) or 0
-                                    ),
-                                    "strike_price": (
-                                        self._extract_strike_price(code)
-                                    ),
-                                    "expire_date": (
-                                        self._extract_expire_date(code)
-                                    ),
+                                    "open_interest": int(d.get("f8", 0) or 0),
+                                    "change_percent": (d.get("f4", 0) or 0),
+                                    "strike_price": (self._extract_strike_price(code)),
+                                    "expire_date": (self._extract_expire_date(code)),
                                     "iv": 0.2 + random.random() * 0.3,
                                     "delta": 0.5 - random.random(),
                                     "theta": -random.random() * 0.1,
@@ -287,9 +243,7 @@ class OptionCrawler:
                         continue
 
         except Exception as e:
-            logger.error(
-                "获取期权报价失败: " + str(e), exc_info=True
-            )
+            logger.error("获取期权报价失败: " + str(e), exc_info=True)
 
         return quotes
 
@@ -301,9 +255,7 @@ class OptionCrawler:
             if len(option_code) >= 8:
                 # 尝试解析行权价
                 price_str = (
-                    option_code[-5:]
-                    if len(option_code) >= 13
-                    else option_code[-4:]
+                    option_code[-5:] if len(option_code) >= 13 else option_code[-4:]
                 )
                 return float(price_str) / 1000.0
         except Exception:
@@ -335,17 +287,11 @@ class OptionCrawler:
         elif "P" in option_code or "沽" in option_code or "P" in code_upper:
             return "put"
         # 默认根据代码位置判断
-        return (
-            "call"
-            if sum(int(c) for c in option_code) % 2 == 0
-            else "put"
-        )
+        return "call" if sum(int(c) for c in option_code) % 2 == 0 else "put"
 
     def _convert_stock_code(self, stock_code: str) -> str:
         """转换股票代码格式"""
-        if stock_code.startswith(
-            ("600", "601", "603", "605", "688", "51", "56", "58")
-        ):
+        if stock_code.startswith(("600", "601", "603", "605", "688", "51", "56", "58")):
             if not stock_code.startswith("sh"):
                 return "sh" + stock_code
             return stock_code

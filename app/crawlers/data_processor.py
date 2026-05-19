@@ -90,12 +90,8 @@ class DataProcessor:
         ]
         group_cols = ["datetime", "stock_code", "period"]
 
-        available_numeric = [
-            col for col in numeric_cols if col in merged.columns
-        ]
-        available_group = [
-            col for col in group_cols if col in merged.columns
-        ]
+        available_numeric = [col for col in numeric_cols if col in merged.columns]
+        available_group = [col for col in group_cols if col in merged.columns]
 
         if not available_group or not available_numeric:
             return merged
@@ -114,9 +110,7 @@ class DataProcessor:
         if "source" in merged.columns:
             agg_dict["source"] = lambda x: ",".join(set(x))
 
-        result = merged.groupby(
-            available_group, as_index=False
-        ).agg(agg_dict)
+        result = merged.groupby(available_group, as_index=False).agg(agg_dict)
         return result
 
     @staticmethod
@@ -151,9 +145,7 @@ class DataProcessor:
             "close_price",
             "volume",
         ]
-        available_cols = [
-            col for col in required_cols if col in df.columns
-        ]
+        available_cols = [col for col in required_cols if col in df.columns]
 
         if len(available_cols) < len(required_cols):
             df = df.dropna(subset=available_cols)
@@ -169,21 +161,18 @@ class DataProcessor:
 
         # 去除重复数据：按 stock_code + period + datetime 去重，保留第一条
         dup_cols = ["stock_code", "period", "datetime"]
-        dup_cols_available = [
-            col for col in dup_cols if col in df.columns
-        ]
+        dup_cols_available = [col for col in dup_cols if col in df.columns]
         if len(dup_cols_available) >= 2:
             before_dedup = len(df)
-            df = df.drop_duplicates(
-                subset=dup_cols_available, keep="first"
-            )
+            df = df.drop_duplicates(subset=dup_cols_available, keep="first")
             after_dedup = len(df)
             if before_dedup != after_dedup:
                 print(
                     "[DataProcessor] 去重: 从 "
                     + str(before_dedup)
                     + " 条减少到 "
-                    + str(after_dedup) + " 条"
+                    + str(after_dedup)
+                    + " 条"
                 )
 
         # 修正日期：将所有非交易日的数据日期修正为向前最近的交易日
@@ -198,11 +187,7 @@ class DataProcessor:
             for i in range(len(df)):
                 orig = original_dates.iloc[i]
                 fixed = df["datetime"].iloc[i]
-                if (
-                    pd.notna(orig)
-                    and pd.notna(fixed)
-                    and orig.date() != fixed.date()
-                ):
+                if pd.notna(orig) and pd.notna(fixed) and orig.date() != fixed.date():
                     print(
                         "[DataProcessor] 日期修正: "
                         + str(orig.date())
@@ -220,9 +205,7 @@ class DataProcessor:
             # 按 stock_code + period + 日期分组，保留 datetime 最大的记录（时间较晚的）
             df = (
                 df.sort_values("datetime")
-                .groupby(
-                    ["stock_code", "period", "_date"], as_index=False
-                )
+                .groupby(["stock_code", "period", "_date"], as_index=False)
                 .last()
             )
             after_dedup = len(df)
@@ -235,16 +218,15 @@ class DataProcessor:
                     "[DataProcessor] 按日期去重: 从 "
                     + str(before_dedup)
                     + " 条减少到 "
-                    + str(after_dedup) + " 条"
+                    + str(after_dedup)
+                    + " 条"
                 )
 
         df = df.sort_values("datetime").reset_index(drop=True)
         return df
 
     @staticmethod
-    def resample_data(
-        df: pd.DataFrame, target_period: str
-    ) -> pd.DataFrame:
+    def resample_data(df: pd.DataFrame, target_period: str) -> pd.DataFrame:
         """
         将数据重采样到指定周期
 
@@ -302,14 +284,10 @@ class DataProcessor:
         )
 
         resampled["stock_code"] = (
-            df["stock_code"].iloc[0]
-            if "stock_code" in df.columns
-            else None
+            df["stock_code"].iloc[0] if "stock_code" in df.columns else None
         )
         resampled["stock_name"] = (
-            df["stock_name"].iloc[0]
-            if "stock_name" in df.columns
-            else None
+            df["stock_name"].iloc[0] if "stock_name" in df.columns else None
         )
         resampled["period"] = target_period
         resampled["source"] = "resampled"

@@ -29,26 +29,18 @@ def get_backtests(
 
 
 @router.get("/results/{backtest_id}", response_model=Optional[BacktestResult])
-def get_backtest(
-    backtest_id: int, db: Session = Depends(get_db)
-):
+def get_backtest(backtest_id: int, db: Session = Depends(get_db)):
     service = BacktestService(db)
     result = service.get_backtest(backtest_id)
     if not result:
-        raise HTTPException(
-            status_code=404, detail="Backtest result not found"
-        )
+        raise HTTPException(status_code=404, detail="Backtest result not found")
     return result
 
 
 @router.delete("/results/{backtest_id}")
-def delete_backtest(
-    backtest_id: int, db: Session = Depends(get_db)
-):
+def delete_backtest(backtest_id: int, db: Session = Depends(get_db)):
     service = BacktestService(db)
     success = service.delete_backtest(backtest_id)
     if not success:
-        raise HTTPException(
-            status_code=404, detail="Backtest result not found"
-        )
+        raise HTTPException(status_code=404, detail="Backtest result not found")
     return {"message": "Backtest result deleted successfully"}

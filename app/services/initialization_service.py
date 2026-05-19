@@ -162,9 +162,7 @@ class InitializationService:
         try:
             StockService(self.db)
 
-            thread = threading.Thread(
-                target=_run_initialization_task, daemon=True
-            )
+            thread = threading.Thread(target=_run_initialization_task, daemon=True)
             thread.start()
             logger.info("数据新鲜度检查已开始 (后台运行)")
 

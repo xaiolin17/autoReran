@@ -20,9 +20,7 @@ class CacheEntry:
 
 
 class LRUCache:
-    def __init__(
-        self, maxsize: int = 128, default_ttl: Optional[float] = None
-    ):
+    def __init__(self, maxsize: int = 128, default_ttl: Optional[float] = None):
         self.cache: OrderedDict[str, CacheEntry] = OrderedDict()
         self.maxsize = maxsize
         self.default_ttl = default_ttl
@@ -126,14 +124,13 @@ def lru_cache(
         def wrapper(*args, **kwargs):
             cache = get_cache()
 
-            filtered_kwargs = {
-                k: v for k, v in kwargs.items()
-                if k not in exclude_args
-            }
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in exclude_args}
 
             key = (
-                key_prefix + ":"
-                + func.__name__ + ":"
+                key_prefix
+                + ":"
+                + func.__name__
+                + ":"
                 + make_cache_key(*args, **filtered_kwargs)
             )
 

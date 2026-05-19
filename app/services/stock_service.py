@@ -419,44 +419,58 @@ class StockService:
                 if latest_date_only >= today:
                     logger.info(
                         "已有数据已是最新 (截止 "
-                        + str(latest_date_only) + ")，无需更新"
+                        + str(latest_date_only)
+                        + ")，无需更新"
                     )
                     return []
 
-                actual_start_date = (
-                    latest_date_only + timedelta(days=1)
-                ).strftime("%Y%m%d")
+                actual_start_date = (latest_date_only + timedelta(days=1)).strftime(
+                    "%Y%m%d"
+                )
                 logger.info(
-                    "增量更新: 从 " + actual_start_date
-                    + " 开始获取 " + display_code + stock_name
-                    + " " + period + " 数据"
+                    "增量更新: 从 "
+                    + actual_start_date
+                    + " 开始获取 "
+                    + display_code
+                    + stock_name
+                    + " "
+                    + period
+                    + " 数据"
                 )
 
         logger.info(
             "开始获取并保存股票数据: stock_code="
-            + display_code + stock_name
-            + ", period=" + period
-            + ", start_date=" + str(actual_start_date)
-            + ", end_date=" + str(actual_end_date)
-            + ", incremental=" + str(incremental)
-            + ", source=" + str(source)
-            + ", force=" + str(force)
+            + display_code
+            + stock_name
+            + ", period="
+            + period
+            + ", start_date="
+            + str(actual_start_date)
+            + ", end_date="
+            + str(actual_end_date)
+            + ", incremental="
+            + str(incremental)
+            + ", source="
+            + str(source)
+            + ", force="
+            + str(force)
         )
 
         # 根据数据源类型选择获取方式
         if source == "realtime":
-            logger.info(
-                "使用实时行情接口获取数据: "
-                + display_code + stock_name
-            )
+            logger.info("使用实时行情接口获取数据: " + display_code + stock_name)
             df = self.crawler.fetch_realtime_data_as_df(stock_code)
         else:
             logger.debug(
                 "开始从爬虫获取数据: stock_code="
-                + display_code + stock_name
-                + ", period=" + period
-                + ", start_date=" + str(start_date)
-                + ", end_date=" + str(end_date)
+                + display_code
+                + stock_name
+                + ", period="
+                + period
+                + ", start_date="
+                + str(start_date)
+                + ", end_date="
+                + str(end_date)
             )
             df = self.crawler.fetch_stock_data(
                 stock_code=stock_code,
@@ -468,9 +482,13 @@ class StockService:
         if df.empty:
             logger.warning(
                 "未能从 TickFlow 获取到数据: "
-                + display_code + stock_name
-                + " " + period
-                + " (source=" + str(source) + ")"
+                + display_code
+                + stock_name
+                + " "
+                + period
+                + " (source="
+                + str(source)
+                + ")"
             )
             return []
 

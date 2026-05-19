@@ -26,7 +26,8 @@ router = APIRouter()
 # response_model=UserOut 表示成功时返回 UserOut 结构的数据
 # status_code=201 表示创建成功
 @router.post(
-    "/register", response_model=UserOut,
+    "/register",
+    response_model=UserOut,
     status_code=status.HTTP_201_CREATED,
 )
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
@@ -63,9 +64,7 @@ def login(
     - db: 数据库会话
     """
     # 调用 service 层验证用户凭证（根据邮箱和密码查找用户，密码验证在 service 内部完成）
-    user = user_service.authenticate_user(
-        db, form_data.username, form_data.password
-    )
+    user = user_service.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         # 验证失败（用户不存在或密码错误），抛出 401 未授权错误
         raise HTTPException(
@@ -75,9 +74,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     # 验证成功，生成 JWT 访问令牌，sub（主题）字段存储用户邮箱
-    access_token = create_access_token(
-        data={"sub": user.email}
-    )
+    access_token = create_access_token(data={"sub": user.email})
     # 按照 OAuth2 规范返回 token 和 token_type
     return {"access_token": access_token, "token_type": "bearer"}
 

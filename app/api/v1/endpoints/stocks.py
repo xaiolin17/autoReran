@@ -58,9 +58,7 @@ def get_available_stocks(db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=StockData)
-def create_stock_data(
-    stock_data: StockDataCreate, db: Session = Depends(get_db)
-):
+def create_stock_data(stock_data: StockDataCreate, db: Session = Depends(get_db)):
     """
     手动创建单条股票数据记录
 
@@ -88,9 +86,7 @@ def create_stock_data(
 # 2. 股票代码搜索接口 (模糊查询)
 # ============================================================
 @router.get("/search")
-def search_stocks(
-    keyword: str, limit: int = 20, db: Session = Depends(get_db)
-):
+def search_stocks(keyword: str, limit: int = 20, db: Session = Depends(get_db)):
     """
     模糊查询股票代码，返回匹配的代码列表
 
@@ -135,9 +131,7 @@ class MarkUpdateV2(BaseModel):
 
 
 @router.get("/marks")
-def get_marks(
-    stock_code: str, period: str = "1d", db: Session = Depends(get_db)
-):
+def get_marks(stock_code: str, period: str = "1d", db: Session = Depends(get_db)):
     """
     获取指定股票和周期的所有标记数据
 
@@ -164,11 +158,7 @@ def get_marks(
 
     # 将短代码转换为完整代码
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -244,11 +234,7 @@ def update_mark(
     from app.models.stock_data import StockCode
 
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -358,10 +344,14 @@ def fetch_async(
         3. 下载完成后自动计算技术指标
     """
     logger.info(
-        "接收到异步下载请求: stock_code=" + stock_code
-        + ", period=" + period
-        + ", start_date=" + str(start_date)
-        + ", end_date=" + str(end_date)
+        "接收到异步下载请求: stock_code="
+        + stock_code
+        + ", period="
+        + period
+        + ", start_date="
+        + str(start_date)
+        + ", end_date="
+        + str(end_date)
     )
 
     thread = threading.Thread(
@@ -451,20 +441,10 @@ def refresh_stock_data(
         latest_date_only = latest_date.date()
         today = datetime.now().date()
         if latest_date_only >= today:
-            message = (
-                "已有数据已是最新 (截止 "
-                + str(latest_date_only)
-                + ")，无需更新"
-            )
+            message = "已有数据已是最新 (截止 " + str(latest_date_only) + ")，无需更新"
         else:
-            start_date_str = (
-                (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
-            )
-            message = (
-                "发现现有数据，从 "
-                + start_date_str
-                + " 开始增量更新"
-            )
+            start_date_str = (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
+            message = "发现现有数据，从 " + start_date_str + " 开始增量更新"
     else:
         message = "没有现有数据，将下载完整数据"
 
@@ -605,9 +585,7 @@ def get_stock_data(
         调用 StockService.get_stock_data() 从数据库查询指定股票、周期、日期范围的数据，支持分页限制
     """
     service = StockService(db)
-    return service.get_stock_data(
-        stock_code, period, start_date, end_date, limit
-    )
+    return service.get_stock_data(stock_code, period, start_date, end_date, limit)
 
 
 # ============================================================
@@ -644,10 +622,14 @@ def _send_progress_ws(
         4. 发送失败时静默忽略，避免影响主任务
     """
     logger.debug(
-        "发送WebSocket进度通知: stock_code=" + stock_code
-        + ", status=" + status
-        + ", progress=" + str(progress)
-        + ", message=" + message
+        "发送WebSocket进度通知: stock_code="
+        + stock_code
+        + ", status="
+        + status
+        + ", progress="
+        + str(progress)
+        + ", message="
+        + message
     )
     import asyncio
 
@@ -722,10 +704,14 @@ def _run_fetch_task(
     from app.core.database import SessionLocal
 
     logger.info(
-        "开始执行后台下载任务: stock_code=" + stock_code
-        + ", period=" + period
-        + ", start_date=" + str(start_date)
-        + ", end_date=" + str(end_date)
+        "开始执行后台下载任务: stock_code="
+        + stock_code
+        + ", period="
+        + period
+        + ", start_date="
+        + str(start_date)
+        + ", end_date="
+        + str(end_date)
     )
 
     db = SessionLocal()
@@ -734,9 +720,7 @@ def _run_fetch_task(
         indicator_service = IndicatorService(db)
 
         logger.debug("发送下载开始进度通知")
-        _send_progress_ws(
-            stock_code, "downloading", 10, "正在从 TickFlow 获取数据..."
-        )
+        _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
         logger.debug("开始获取并保存股票数据")
         saved_data = service.fetch_and_save_stock_data(
@@ -745,12 +729,9 @@ def _run_fetch_task(
 
         if saved_data:
             logger.info(
-                "数据下载完成，开始计算技术指标: "
-                + str(len(saved_data)) + " 条数据"
+                "数据下载完成，开始计算技术指标: " + str(len(saved_data)) + " 条数据"
             )
-            _send_progress_ws(
-                stock_code, "calculating", 70, "正在计算技术指标..."
-            )
+            _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")
             indicator_service.calculate_and_save_indicators(stock_code, period)
             logger.info("技术指标计算完成")
             _send_progress_ws(
@@ -762,24 +743,16 @@ def _run_fetch_task(
             )
         else:
             logger.info("下载完成，无新数据")
-            _send_progress_ws(
-                stock_code, "completed", 100, "无新数据", False
-            )
+            _send_progress_ws(stock_code, "completed", 100, "无新数据", False)
     except Exception as e:
         logger.error("后台下载任务失败: " + str(e), exc_info=True)
-        _send_progress_ws(
-            stock_code, "error", 0, "下载失败: " + str(e)
-        )
+        _send_progress_ws(stock_code, "error", 0, "下载失败: " + str(e))
     finally:
         db.close()
-        logger.info(
-            "后台下载任务完成并关闭数据库连接: stock_code=" + stock_code
-        )
+        logger.info("后台下载任务完成并关闭数据库连接: stock_code=" + stock_code)
 
 
-def _run_refresh_task(
-    stock_code: str, period: str, start_date: Optional[str] = None
-):
+def _run_refresh_task(stock_code: str, period: str, start_date: Optional[str] = None):
     """
     后台增量刷新股票数据的任务函数
 
@@ -809,18 +782,14 @@ def _run_refresh_task(
         service = StockService(db)
         indicator_service = IndicatorService(db)
 
-        _send_progress_ws(
-            stock_code, "downloading", 10, "正在从 TickFlow 获取数据..."
-        )
+        _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
         saved_data = service.fetch_and_save_stock_data(
             stock_code, period, start_date=start_date, incremental=True
         )
 
         if saved_data:
-            _send_progress_ws(
-                stock_code, "calculating", 70, "正在计算技术指标..."
-            )
+            _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")
             indicator_service.calculate_and_save_indicators(stock_code, period)
             _send_progress_ws(
                 stock_code,
@@ -838,9 +807,7 @@ def _run_refresh_task(
                 False,
             )
     except Exception as e:
-        _send_progress_ws(
-            stock_code, "error", 0, "刷新失败: " + str(e)
-        )
+        _send_progress_ws(stock_code, "error", 0, "刷新失败: " + str(e))
     finally:
         db.close()
 
@@ -893,15 +860,11 @@ def _run_force_refresh_task(stock_code: str, period: str):
             start_dt = today - timedelta(days=730)
             # 找到最近的交易日
             end_date = calendar.session_offset(today, 0).strftime("%Y%m%d")
-            start_date = calendar.session_offset(start_dt, 0).strftime(
-                "%Y%m%d"
-            )
+            start_date = calendar.session_offset(start_dt, 0).strftime("%Y%m%d")
         except Exception:
             # fallback: 不使用交易日对齐
             end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (
-                (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
-            )
+            start_date = (datetime.now() - timedelta(days=730)).strftime("%Y%m%d")
 
         saved_data = service.fetch_and_save_stock_data(
             stock_code,
@@ -913,16 +876,13 @@ def _run_force_refresh_task(stock_code: str, period: str):
         )
 
         if saved_data:
-            _send_progress_ws(
-                stock_code, "calculating", 70, "正在计算技术指标..."
-            )
+            _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")
             indicator_service.calculate_and_save_indicators(stock_code, period)
             _send_progress_ws(
                 stock_code,
                 "completed",
                 100,
-                "强制刷新完成，共处理 "
-                + str(len(saved_data)) + " 条数据",
+                "强制刷新完成，共处理 " + str(len(saved_data)) + " 条数据",
                 True,
             )
         else:
@@ -934,8 +894,6 @@ def _run_force_refresh_task(stock_code: str, period: str):
                 False,
             )
     except Exception as e:
-        _send_progress_ws(
-            stock_code, "error", 0, "强制刷新失败: " + str(e)
-        )
+        _send_progress_ws(stock_code, "error", 0, "强制刷新失败: " + str(e))
     finally:
         db.close()

@@ -55,10 +55,14 @@ def get_stock_data_with_indicators(
         4. 返回数据和缺失范围给前端，由前端决定如何下载
     """
     logger.info(
-        "获取股票指标数据请求: stock_code=" + stock_code
-        + ", period=" + period
-        + ", start_date=" + str(start_date)
-        + ", end_date=" + str(end_date)
+        "获取股票指标数据请求: stock_code="
+        + stock_code
+        + ", period="
+        + period
+        + ", start_date="
+        + str(start_date)
+        + ", end_date="
+        + str(end_date)
     )
 
     service = IndicatorService(db)
@@ -85,22 +89,14 @@ def get_stock_data_with_indicators(
         try:
             from app.models.stock_data import StockCode
 
-            clean_code = (
-                stock_code.split(".")[0]
-                if "." in stock_code
-                else stock_code
-            )
+            clean_code = stock_code.split(".")[0] if "." in stock_code else stock_code
             user_suffix = None
             if "." in stock_code:
                 parts = stock_code.split(".")
                 if len(parts) == 2:
                     user_suffix = parts[1].upper()
 
-            records = (
-                db.query(StockCode)
-                .filter(StockCode.code == clean_code)
-                .all()
-            )
+            records = db.query(StockCode).filter(StockCode.code == clean_code).all()
             if records:
                 if user_suffix:
                     for r in records:
@@ -176,11 +172,7 @@ def get_recent_stock_data(
 
     # 将短代码转换为完整代码
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -235,11 +227,7 @@ def get_recent_stock_data(
                 "low_price": float(row["low_price"]),
                 "close_price": float(row["close_price"]),
                 "volume": float(row["volume"]),
-                "amount": (
-                    float(row["amount"])
-                    if pd.notna(row["amount"])
-                    else None
-                ),
+                "amount": (float(row["amount"]) if pd.notna(row["amount"]) else None),
             }
 
             for col in [
@@ -255,19 +243,11 @@ def get_recent_stock_data(
                 "bb_lower",
             ]:
                 if col in row:
-                    item[col] = (
-                        float(row[col])
-                        if pd.notna(row[col])
-                        else None
-                    )
+                    item[col] = float(row[col]) if pd.notna(row[col]) else None
 
             for col in ["ma5", "ma10", "ma20", "ma60"]:
                 if col in row:
-                    item[col] = (
-                        float(row[col])
-                        if pd.notna(row[col])
-                        else None
-                    )
+                    item[col] = float(row[col]) if pd.notna(row[col]) else None
 
             result.append(item)
 
@@ -320,11 +300,7 @@ def get_paged_stock_data(
 
     # 将短代码转换为完整代码
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -386,11 +362,7 @@ def get_paged_stock_data(
                 "low_price": float(row["low_price"]),
                 "close_price": float(row["close_price"]),
                 "volume": float(row["volume"]),
-                "amount": (
-                    float(row["amount"])
-                    if pd.notna(row["amount"])
-                    else None
-                ),
+                "amount": (float(row["amount"]) if pd.notna(row["amount"]) else None),
             }
 
             for col in [
@@ -406,19 +378,11 @@ def get_paged_stock_data(
                 "bb_lower",
             ]:
                 if col in row:
-                    item[col] = (
-                        float(row[col])
-                        if pd.notna(row[col])
-                        else None
-                    )
+                    item[col] = float(row[col]) if pd.notna(row[col]) else None
 
             for col in ["ma5", "ma10", "ma20", "ma60"]:
                 if col in row:
-                    item[col] = (
-                        float(row[col])
-                        if pd.notna(row[col])
-                        else None
-                    )
+                    item[col] = float(row[col]) if pd.notna(row[col]) else None
 
             result.append(item)
 
@@ -472,9 +436,7 @@ def download_stock_data(
 
     # 先检查是否已有数据
     stock_service = StockService(db)
-    existing_data = stock_service.get_stock_data(
-        stock_code, period, limit=1
-    )
+    existing_data = stock_service.get_stock_data(stock_code, period, limit=1)
 
     if download_all:
         # 下载所有周期
@@ -546,9 +508,7 @@ def get_task_status(task_id: str):
     return status
 
 
-def _download_task(
-    stock_code: str, period: str, task_id: str, incremental: bool
-):
+def _download_task(stock_code: str, period: str, task_id: str, incremental: bool):
     """
     后台下载任务（单周期）
 
@@ -591,15 +551,11 @@ def _download_task(
         if incremental:
             # 更新最近数据
             end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (
-                (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
-            )
+            start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
         else:
             # 下载一年数据
             end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (
-                (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
-            )
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
 
         task_status[task_id] = {
             "status": "downloading",
@@ -663,12 +619,8 @@ def _merge_missing_ranges(missing_ranges: List[Dict]) -> List[Dict]:
         return missing_ranges
 
     # 分离实时接口范围和历史接口范围
-    realtime_ranges = [
-        r for r in missing_ranges if r.get("source") == "realtime"
-    ]
-    history_ranges = [
-        r for r in missing_ranges if r.get("source") != "realtime"
-    ]
+    realtime_ranges = [r for r in missing_ranges if r.get("source") == "realtime"]
+    history_ranges = [r for r in missing_ranges if r.get("source") != "realtime"]
 
     # 只合并历史接口范围
     if len(history_ranges) <= 1:
@@ -679,12 +631,8 @@ def _merge_missing_ranges(missing_ranges: List[Dict]) -> List[Dict]:
 
         for current in sorted_history[1:]:
             last = merged_history[-1]
-            last_end = datetime.strptime(
-                last["end"], "%Y-%m-%d"
-            ).date()
-            curr_start = datetime.strptime(
-                current["start"], "%Y-%m-%d"
-            ).date()
+            last_end = datetime.strptime(last["end"], "%Y-%m-%d").date()
+            curr_start = datetime.strptime(current["start"], "%Y-%m-%d").date()
 
             if curr_start <= last_end + timedelta(days=3):
                 last["end"] = max(last["end"], current["end"])
@@ -740,15 +688,22 @@ def _download_missing_ranges_task(
     merged_count = len(missing_ranges)
     if merged_count < original_count:
         logger.info(
-            "合并缺失范围: " + str(original_count)
-            + " 个 -> " + str(merged_count) + " 个"
+            "合并缺失范围: "
+            + str(original_count)
+            + " 个 -> "
+            + str(merged_count)
+            + " 个"
         )
 
     logger.info(
-        "开始执行后台下载任务: task_id=" + task_id
-        + ", stock_code=" + stock_code
-        + ", period=" + period
-        + ", missing_ranges_count=" + str(merged_count)
+        "开始执行后台下载任务: task_id="
+        + task_id
+        + ", stock_code="
+        + stock_code
+        + ", period="
+        + period
+        + ", missing_ranges_count="
+        + str(merged_count)
     )
 
     db_local = SessionLocal()
@@ -762,9 +717,14 @@ def _download_missing_ranges_task(
 
         for i, missing_range in enumerate(missing_ranges):
             logger.info(
-                "开始下载数据范围 " + str(i + 1) + "/" + str(total_ranges)
-                + ": " + missing_range["start"]
-                + " 到 " + missing_range["end"]
+                "开始下载数据范围 "
+                + str(i + 1)
+                + "/"
+                + str(total_ranges)
+                + ": "
+                + missing_range["start"]
+                + " 到 "
+                + missing_range["end"]
             )
             progress = int(10 + (i / total_ranges) * 80)
             task_status[task_id] = {
@@ -772,9 +732,13 @@ def _download_missing_ranges_task(
                 "progress": progress,
                 "message": (
                     "正在下载缺失数据范围 ("
-                    + str(i + 1) + "/" + str(total_ranges)
-                    + "): " + missing_range["start"]
-                    + " 到 " + missing_range["end"]
+                    + str(i + 1)
+                    + "/"
+                    + str(total_ranges)
+                    + "): "
+                    + missing_range["start"]
+                    + " 到 "
+                    + missing_range["end"]
                 ),
             }
 
@@ -782,8 +746,10 @@ def _download_missing_ranges_task(
             def _send_websocket_notification():
                 async def _broadcast():
                     logger.debug(
-                        "发送WebSocket进度通知: task_id=" + task_id
-                        + ", progress=" + str(progress)
+                        "发送WebSocket进度通知: task_id="
+                        + task_id
+                        + ", progress="
+                        + str(progress)
                     )
                     await manager.broadcast(
                         {
@@ -794,15 +760,23 @@ def _download_missing_ranges_task(
                                 "progress": progress,
                                 "step": (
                                     "正在下载数据范围 ("
-                                    + str(i + 1) + "/" + str(total_ranges)
-                                    + "): " + missing_range["start"]
-                                    + " 到 " + missing_range["end"]
+                                    + str(i + 1)
+                                    + "/"
+                                    + str(total_ranges)
+                                    + "): "
+                                    + missing_range["start"]
+                                    + " 到 "
+                                    + missing_range["end"]
                                 ),
                                 "message": (
                                     "正在下载缺失数据范围 ("
-                                    + str(i + 1) + "/" + str(total_ranges)
-                                    + "): " + missing_range["start"]
-                                    + " 到 " + missing_range["end"]
+                                    + str(i + 1)
+                                    + "/"
+                                    + str(total_ranges)
+                                    + "): "
+                                    + missing_range["start"]
+                                    + " 到 "
+                                    + missing_range["end"]
                                 ),
                                 "status": "downloading",
                                 "new_data_available": False,
@@ -826,9 +800,7 @@ def _download_missing_ranges_task(
 
                 if range_source == "realtime":
                     # 使用实时行情接口获取当天数据
-                    logger.info(
-                        "使用实时行情接口获取当天数据: " + stock_code
-                    )
+                    logger.info("使用实时行情接口获取当天数据: " + stock_code)
                     stock_service.fetch_and_save_stock_data(
                         stock_code=stock_code,
                         period=period,
@@ -838,9 +810,13 @@ def _download_missing_ranges_task(
                     # 使用历史K线接口获取数据
                     logger.debug(
                         "调用fetch_and_save_stock_data: stock_code="
-                        + stock_code + ", period=" + period
-                        + ", start_date=" + missing_range["start"]
-                        + ", end_date=" + missing_range["end"]
+                        + stock_code
+                        + ", period="
+                        + period
+                        + ", start_date="
+                        + missing_range["start"]
+                        + ", end_date="
+                        + missing_range["end"]
                     )
                     stock_service.fetch_and_save_stock_data(
                         stock_code=stock_code,
@@ -854,16 +830,19 @@ def _download_missing_ranges_task(
                     )
 
                 logger.info(
-                    "数据范围 " + str(i + 1) + "/" + str(total_ranges)
-                    + " 下载完成"
+                    "数据范围 " + str(i + 1) + "/" + str(total_ranges) + " 下载完成"
                 )
 
                 # 计算新下载数据的技术指标
                 logger.debug(
-                    "开始计算技术指标: stock_code=" + stock_code
-                    + ", period=" + period
-                    + ", start_date=" + missing_range["start"]
-                    + ", end_date=" + missing_range["end"]
+                    "开始计算技术指标: stock_code="
+                    + stock_code
+                    + ", period="
+                    + period
+                    + ", start_date="
+                    + missing_range["start"]
+                    + ", end_date="
+                    + missing_range["end"]
                 )
                 indicator_service.get_stock_data_with_indicators(
                     stock_code=stock_code,
@@ -874,15 +853,17 @@ def _download_missing_ranges_task(
 
             except Exception as e:
                 logger.error(
-                    "下载数据范围 " + str(missing_range)
-                    + " 时出错: " + str(e),
+                    "下载数据范围 " + str(missing_range) + " 时出错: " + str(e),
                     exc_info=True,
                 )
                 continue
 
         logger.info(
-            "所有数据范围下载完成: task_id=" + task_id
-            + ", 总计 " + str(total_ranges) + " 个范围"
+            "所有数据范围下载完成: task_id="
+            + task_id
+            + ", 总计 "
+            + str(total_ranges)
+            + " 个范围"
         )
         task_status[task_id] = {
             "status": "completed",
@@ -894,9 +875,7 @@ def _download_missing_ranges_task(
         # 发送完成通知
         def _send_completion_notification():
             async def _broadcast():
-                logger.info(
-                    "发送下载完成WebSocket通知: task_id=" + task_id
-                )
+                logger.info("发送下载完成WebSocket通知: task_id=" + task_id)
                 await manager.broadcast(
                     {
                         "type": "download_progress",
@@ -904,14 +883,8 @@ def _download_missing_ranges_task(
                             "stock_code": stock_code,
                             "task_id": task_id,
                             "progress": 100,
-                            "step": (
-                                str(total_ranges)
-                                + "个缺失数据范围下载完成"
-                            ),
-                            "message": (
-                                str(total_ranges)
-                                + "个缺失数据范围下载完成"
-                            ),
+                            "step": (str(total_ranges) + "个缺失数据范围下载完成"),
+                            "message": (str(total_ranges) + "个缺失数据范围下载完成"),
                             "status": "completed",
                             "new_data_available": True,
                         },
@@ -931,8 +904,7 @@ def _download_missing_ranges_task(
     except Exception as exc:
         exc_msg = str(exc)
         logger.error(
-            "后台下载任务执行失败: task_id=" + task_id
-            + ", error=" + exc_msg,
+            "后台下载任务执行失败: task_id=" + task_id + ", error=" + exc_msg,
             exc_info=True,
         )
         task_status[task_id] = {
@@ -944,9 +916,7 @@ def _download_missing_ranges_task(
         # 发送错误通知
         def _send_error_notification():
             async def _broadcast():
-                logger.info(
-                    "发送下载错误WebSocket通知: task_id=" + task_id
-                )
+                logger.info("发送下载错误WebSocket通知: task_id=" + task_id)
                 await manager.broadcast(
                     {
                         "type": "download_progress",
@@ -974,14 +944,10 @@ def _download_missing_ranges_task(
 
     finally:
         db_local.close()
-        logger.info(
-            "后台下载任务完成并关闭数据库连接: task_id=" + task_id
-        )
+        logger.info("后台下载任务完成并关闭数据库连接: task_id=" + task_id)
 
 
-def _download_all_periods_task(
-    stock_code: str, task_id: str, incremental: bool
-):
+def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool):
     """
     后台下载所有周期数据任务
 
@@ -1025,8 +991,12 @@ def _download_all_periods_task(
                 "status": "downloading",
                 "progress": progress,
                 "message": (
-                    "正在下载" + period + "周期数据 ("
-                    + str(i + 1) + "/" + str(total_periods)
+                    "正在下载"
+                    + period
+                    + "周期数据 ("
+                    + str(i + 1)
+                    + "/"
+                    + str(total_periods)
                     + ")..."
                 ),
             }
@@ -1034,14 +1004,10 @@ def _download_all_periods_task(
             # 下载数据
             if incremental:
                 end_date = datetime.now().strftime("%Y%m%d")
-                start_date = (
-                    (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
-                )
+                start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
             else:
                 end_date = datetime.now().strftime("%Y%m%d")
-                start_date = (
-                    (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
-                )
+                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
 
             try:
                 stock_service.fetch_and_save_stock_data(
@@ -1049,9 +1015,7 @@ def _download_all_periods_task(
                 )
 
                 # 计算技术指标
-                indicator_service.get_stock_data_with_indicators(
-                    stock_code, period
-                )
+                indicator_service.get_stock_data_with_indicators(stock_code, period)
 
             except Exception as e:
                 logger.error(
@@ -1112,11 +1076,7 @@ def get_indicator_signals(
 
     # 将短代码转换为完整代码
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -1135,9 +1095,7 @@ def get_indicator_signals(
     stock_data_list = query.all()
 
     if not stock_data_list:
-        raise HTTPException(
-            status_code=404, detail="Stock data not found"
-        )
+        raise HTTPException(status_code=404, detail="Stock data not found")
 
     data = []
     for stock in stock_data_list:

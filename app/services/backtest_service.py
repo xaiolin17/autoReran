@@ -122,7 +122,7 @@ class BacktestService:
             if i < 20:  # 留出足够的数据用于计算指标
                 continue
 
-            current_data = df.iloc[i:i + 1][available_features]
+            current_data = df.iloc[i : i + 1][available_features]
 
             if len(current_data.dropna()) == 0:
                 continue

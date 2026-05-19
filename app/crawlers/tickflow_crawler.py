@@ -671,11 +671,16 @@ class TickFlowCrawler(BaseCrawler):
 
             # 调试日志：查看原始数据中的日期字段
             logger.debug(
-                "原始数据日期解析: trade_date=" + str(trade_date)
-                + ", timestamp=" + str(ts)
-                + ", parsed_dt=" + str(dt)
-                + ", open=" + str(row.get("open"))
-                + ", close=" + str(row.get("close"))
+                "原始数据日期解析: trade_date="
+                + str(trade_date)
+                + ", timestamp="
+                + str(ts)
+                + ", parsed_dt="
+                + str(dt)
+                + ", open="
+                + str(row.get("open"))
+                + ", close="
+                + str(row.get("close"))
             )
 
             # 修正日期：将非交易日的数据日期修正为向前最近的交易日
@@ -683,8 +688,10 @@ class TickFlowCrawler(BaseCrawler):
             dt = _fix_trading_date(dt)
             if original_dt.date() != dt.date():
                 logger.info(
-                    "日期修正: " + str(original_dt.date())
-                    + " -> " + str(dt.date())
+                    "日期修正: "
+                    + str(original_dt.date())
+                    + " -> "
+                    + str(dt.date())
                     + " (非交易日修正为最近交易日), close="
                     + str(row.get("close"))
                 )
@@ -830,12 +837,18 @@ class TickFlowCrawler(BaseCrawler):
             }
 
             logger.info(
-                "获取实时行情数据: " + display_code
-                + ", open=" + str(result["open_price"])
-                + ", high=" + str(result["high_price"])
-                + ", low=" + str(result["low_price"])
-                + ", close=" + str(result["close_price"])
-                + ", volume=" + str(result["volume"])
+                "获取实时行情数据: "
+                + display_code
+                + ", open="
+                + str(result["open_price"])
+                + ", high="
+                + str(result["high_price"])
+                + ", low="
+                + str(result["low_price"])
+                + ", close="
+                + str(result["close_price"])
+                + ", volume="
+                + str(result["volume"])
             )
             return pd.DataFrame([result])
 

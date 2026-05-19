@@ -14,12 +14,6 @@ api_router.include_router(
     prefix="/indicators",
     tags=["indicators"],
 )
-api_router.include_router(
-    ml.router, prefix="/ml", tags=["ml"]
-)
-api_router.include_router(
-    backtest.router, prefix="/backtest", tags=["backtest"]
-)
-api_router.include_router(
-    options.router, prefix="/options", tags=["options"]
-)
+api_router.include_router(ml.router, prefix="/ml", tags=["ml"])
+api_router.include_router(backtest.router, prefix="/backtest", tags=["backtest"])
+api_router.include_router(options.router, prefix="/options", tags=["options"])

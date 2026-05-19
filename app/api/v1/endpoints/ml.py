@@ -40,17 +40,13 @@ def predict_latest(stock_code: str, db: Session = Depends(get_db)):
 
 
 @router.get("/models", response_model=List[MLModel])
-def get_models(
-    stock_code: Optional[str] = None, db: Session = Depends(get_db)
-):
+def get_models(stock_code: Optional[str] = None, db: Session = Depends(get_db)):
     service = MLService(db)
     return service.get_models(stock_code)
 
 
 @router.get("/models/{model_id}", response_model=Optional[MLModel])
-def get_model(
-    model_id: int, db: Session = Depends(get_db)
-):
+def get_model(model_id: int, db: Session = Depends(get_db)):
     service = MLService(db)
     model = service.get_model(model_id)
     if not model:
@@ -65,11 +61,7 @@ def check_labeled_data(stock_code: str, db: Session = Depends(get_db)):
 
     # 将短代码转换为完整代码
     if "." not in stock_code:
-        code_record = (
-            db.query(StockCode)
-            .filter(StockCode.code == stock_code)
-            .first()
-        )
+        code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             stock_code = code_record.name
 
@@ -89,9 +81,7 @@ def check_labeled_data(stock_code: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/models/{model_id}")
-def delete_model(
-    model_id: int, db: Session = Depends(get_db)
-):
+def delete_model(model_id: int, db: Session = Depends(get_db)):
     service = MLService(db)
     success = service.delete_model(model_id)
     if not success:

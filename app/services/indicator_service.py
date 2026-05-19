@@ -571,11 +571,18 @@ class IndicatorService:
             full_symbol = stock_code
 
         logger.info(
-            "开始获取股票指标数据: stock_code=" + stock_code
-            + "(完整代码:" + full_symbol + "), period=" + period
-            + ", start_date=" + str(start_date)
-            + ", end_date=" + str(end_date)
-            + ", limit=" + str(limit)
+            "开始获取股票指标数据: stock_code="
+            + stock_code
+            + "(完整代码:"
+            + full_symbol
+            + "), period="
+            + period
+            + ", start_date="
+            + str(start_date)
+            + ", end_date="
+            + str(end_date)
+            + ", limit="
+            + str(limit)
         )
 
         from datetime import datetime, timedelta
@@ -621,9 +628,7 @@ class IndicatorService:
                 missing_ranges = self._detect_missing_ranges(
                     all_requested_data, req_start, req_end
                 )
-                logger.debug(
-                    "检测到缺失范围数量: " + str(len(missing_ranges))
-                )
+                logger.debug("检测到缺失范围数量: " + str(len(missing_ranges)))
 
         # 重新查询完整的数据集（不在这里同步下载，由 API 层的 BackgroundTasks 处理后台下载）
         logger.debug(f"查询数据库中股票数据: stock_code={stock_code}, period={period}")
@@ -687,9 +692,7 @@ class IndicatorService:
                 "missing_ranges": missing_ranges,
             }
 
-        logger.info(
-            "检测到缺失指标，开始计算: " + stock_code + " " + period
-        )
+        logger.info("检测到缺失指标，开始计算: " + stock_code + " " + period)
         df = self._stock_list_to_dataframe(stock_data_list)
         df = TechnicalIndicators.calculate_all_indicators(df)
 
@@ -981,8 +984,10 @@ class IndicatorService:
         logger.debug(
             "开始检测缺失数据范围: 请求范围 "
             + str(req_start.date())
-            + " ~ " + str(req_end.date())
-            + ", 数据条数=" + str(data_count)
+            + " ~ "
+            + str(req_end.date())
+            + ", 数据条数="
+            + str(data_count)
         )
 
         missing_ranges = []
@@ -1148,9 +1153,13 @@ class IndicatorService:
                         logger.info(
                             "检测到缺失范围: "
                             + str(aligned_missing_start)
-                            + " ~ " + str(aligned_missing_end)
-                            + " (原始: " + str(missing_start)
-                            + " ~ " + str(missing_end) + ")"
+                            + " ~ "
+                            + str(aligned_missing_end)
+                            + " (原始: "
+                            + str(missing_start)
+                            + " ~ "
+                            + str(missing_end)
+                            + ")"
                         )
 
                 # 如果刚好到达循环条件，跳出循环

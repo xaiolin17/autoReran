@@ -8,16 +8,13 @@
 # OAuth2 密码流依赖：用于从请求头中提取 Bearer Token
 from fastapi.security import OAuth2PasswordBearer
 
-
 # ------------------------------------------------------------------
 # OAuth2 方案配置
 # ------------------------------------------------------------------
 # 创建一个 OAuth2PasswordBearer 实例，它会产生一个可调用的依赖项。
 # 当被 Depends() 使用时，它会自动从请求头 Authorization 中提取 Bearer token。
 # tokenUrl 参数指向你的登录端点，用于 OpenAPI 文档自动生成（Swagger UI 会知道在哪里获取 token）。
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/api/v1/users/login"
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 
 
 # ------------------------------------------------------------------
