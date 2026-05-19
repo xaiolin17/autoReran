@@ -1,6 +1,6 @@
 # 股票数据分析平台
 
-一个功能完整的股票数据分析平台，基于 FastAPI 构建，提供 A 股数据获取、K 线图表展示、技术指标计算、机器学习预测、策略回测和期权分析等功能。
+基于 FastAPI 构建，提供 A 股数据获取、K 线图表展示、机器学习预测、策略回测分析等功能。
 
 ## 功能特性
 
@@ -15,11 +15,8 @@
   - 标记数据持久化到数据库，用于后续模型训练
 
 - 📉 **技术指标**
-  - MA（移动平均线）
   - MACD 指标
   - KDJ 指标
-  - RSI 指标
-  - 布林带
 
 - 🤖 **机器学习**
   - 随机森林回归
@@ -32,13 +29,6 @@
   - MACD 策略
   - 组合策略
   - 详细回测报告
-
-- 🎯 **期权分析**
-  - 期权链数据获取（东方财富数据源）
-  - 看涨/看跌期权对比
-  - 多空比例分析
-  - 最大痛点价位计算
-  - 支持 510300、510500、510050 等 ETF 期权
 
 ## 技术栈
 
@@ -157,7 +147,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 2. 点击"获取数据"下载历史数据
 3. 查看 ECharts 渲染的 K 线图、成交量及技术指标
 4. **右键点击 K 线**可标记买入/卖出标签
-5. 点击"加载期权数据"查看期权多空分析（期权标的）
 
 ### 模型训练页面
 
@@ -174,18 +163,18 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## API 接口概览
 
-### 股票数据
+### 数据
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/stocks/{stock_code}` | 获取股票数据 |
-| POST | `/api/v1/stocks/fetch/{stock_code}` | 爬取并保存数据 |
+| GET | `/api/v1/stocks/{stock_code}` | 获取数据 |
+| POST | `/api/v1/stocks/fetch/{stock_code}` | 获取并保存数据 |
 | POST | `/api/v1/stocks/fetch-async/{stock_code}` | 异步下载（WebSocket 通知进度） |
 | POST | `/api/v1/stocks/refresh/{stock_code}` | 刷新数据 |
 | POST | `/api/v1/stocks/force-refresh/{stock_code}` | 强制刷新历史数据 |
 | POST | `/api/v1/stocks/deduplicate/{stock_code}` | 数据去重 |
 | GET | `/api/v1/stocks/latest/{stock_code}` | 获取最新数据 |
-| GET | `/api/v1/stocks/search` | 搜索股票 |
+| GET | `/api/v1/stocks/search` | 搜索 |
 | GET | `/api/v1/stocks/marks` | 获取所有标记 |
 | PUT | `/api/v1/stocks/mark` | 添加/更新标记 |
 
@@ -196,7 +185,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | GET | `/api/v1/indicators/{stock_code}` | 获取带指标数据 |
 | GET | `/api/v1/indicators/{stock_code}/paged` | 分页获取指标数据 |
 | GET | `/api/v1/indicators/{stock_code}/recent` | 获取最近数据 |
-| GET | `/api/v1/indicators/signals/{stock_code}` | 获取交易信号 |
+| GET | `/api/v1/indicators/signals/{stock_code}` | 获取信号 |
 
 ### 机器学习
 
@@ -246,5 +235,4 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 - 本项目仅供学习和研究使用，不构成任何投资建议
 - 实际使用时请遵守相关网站的数据使用条款
-- 所有数据均来自真实数据源，非模拟数据
 - K 线标记功能用于后续模型训练，标记数据会持久化到数据库
