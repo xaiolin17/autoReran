@@ -868,7 +868,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     border: 1px solid var(--glass-border);
     border-radius: 12px;
     padding: 8px;
-    display: flex;
+    display: none;  /* 初始状态隐藏，弹出时通过 JS 设置为 flex */
     flex-direction: column;
     gap: 4px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);

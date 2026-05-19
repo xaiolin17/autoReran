@@ -128,19 +128,39 @@ class TickFlowCrawler(BaseCrawler):
         - StockCode模型: 查询股票代码映射
     """
 
+    # 类级别单例缓存，避免多线程重复初始化TickFlow客户端
+    _instance = None
+    _lock = threading.Lock()
+
+    # 类级别共享资源
+    _tf = None
+    _symbol_map = {}
+    _universe_symbols = []
+    _rate_limiter = RateLimiter(max_calls=10, period_seconds=60)
+
+    def __new__(cls, db=None):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self, db=None):
+        # 避免重复初始化
+        if self._initialized:
+            self._db = db
+            return
+
         self.available = TICKFLOW_AVAILABLE
-        self.max_retries = 1  # 只重试1次
+        self.max_retries = 1
         self.retry_delay = 3
-        self._tf = None
-        self._symbol_map = {}  # 缓存股票代码映射 {short_code: full_symbol}
-        self._universe_symbols = []  # CN_Equity_A 的 symbols 列表
-        self._db = db  # 数据库会话，用于查询 StockCode 表
-        self._rate_limiter = RateLimiter(max_calls=10, period_seconds=60)
+        self._db = db
+        self._initialized = True
 
     def _get_tickflow(self):
         """
-        获取TickFlow实例（懒加载）
+        获取TickFlow实例（懒加载，类级别单例）
 
         参数:
             无
@@ -153,21 +173,22 @@ class TickFlowCrawler(BaseCrawler):
             调用: settings.TICKFLOW_API_KEY, os.getenv
 
         关键逻辑:
-            1. 若已初始化则直接返回缓存实例
+            1. 若类级别已初始化则直接返回缓存实例（多线程共享）
             2. 从settings或环境变量读取TICKFLOW_API_KEY
             3. 若API Key未设置则标记不可用并返回None
-            4. 使用API Key初始化TickFlow客户端
+            4. 使用API Key初始化TickFlow客户端（只初始化一次）
         """
-        if self._tf is None and self.available:
-            # 优先从 settings 读取（支持 .env 文件），其次从环境变量读取
-            api_key = settings.TICKFLOW_API_KEY or os.getenv("TICKFLOW_API_KEY")
-            if not api_key:
-                logger.error("TICKFLOW_API_KEY 未设置，请在 .env 文件中设置或配置环境变量")
-                self.available = False
-                return None
-            self._tf = TickFlow(api_key=api_key)
-            logger.info("TickFlow 客户端初始化成功")
-        return self._tf
+        if TickFlowCrawler._tf is None and self.available:
+            with TickFlowCrawler._lock:
+                if TickFlowCrawler._tf is None and self.available:
+                    api_key = settings.TICKFLOW_API_KEY or os.getenv("TICKFLOW_API_KEY")
+                    if not api_key:
+                        logger.error("TICKFLOW_API_KEY 未设置，请在 .env 文件中设置或配置环境变量")
+                        self.available = False
+                        return None
+                    TickFlowCrawler._tf = TickFlow(api_key=api_key)
+                    logger.info("TickFlow 客户端初始化成功")
+        return TickFlowCrawler._tf
 
     def _retry_fetch(self, fetch_func, *args, **kwargs):
         """
@@ -281,7 +302,7 @@ class TickFlowCrawler(BaseCrawler):
             4. 构建短代码到完整代码的映射表 {short_code: full_symbol}
             5. 缓存到实例变量中
         """
-        if self._universe_symbols:
+        if TickFlowCrawler._universe_symbols:
             return
 
         tf = self._get_tickflow()
@@ -292,12 +313,12 @@ class TickFlowCrawler(BaseCrawler):
             logger.info("正在加载 CN_Equity_A universe symbols...")
             a_shares = tf.universes.get("CN_Equity_A")
             if a_shares and "symbols" in a_shares:
-                self._universe_symbols = a_shares["symbols"]
+                TickFlowCrawler._universe_symbols = a_shares["symbols"]
                 # 构建映射表 {short_code: full_symbol}
-                for sym in self._universe_symbols:
+                for sym in TickFlowCrawler._universe_symbols:
                     short = sym.split('.')[0] if '.' in sym else sym
-                    self._symbol_map[short] = sym
-                logger.info(f"成功加载 {len(self._universe_symbols)} 只A股代码映射")
+                    TickFlowCrawler._symbol_map[short] = sym
+                logger.info(f"成功加载 {len(TickFlowCrawler._universe_symbols)} 只A股代码映射")
             else:
                 logger.warning("无法获取 CN_Equity_A symbols")
         except Exception as e:
@@ -370,15 +391,15 @@ class TickFlowCrawler(BaseCrawler):
             return db_symbol
 
         # 再查缓存
-        if clean_code in self._symbol_map:
-            return self._symbol_map[clean_code]
+        if clean_code in TickFlowCrawler._symbol_map:
+            return TickFlowCrawler._symbol_map[clean_code]
 
         # 加载 universe
         self._load_universe_symbols()
 
         # 再次查询缓存
-        if clean_code in self._symbol_map:
-            return self._symbol_map[clean_code]
+        if clean_code in TickFlowCrawler._symbol_map:
+            return TickFlowCrawler._symbol_map[clean_code]
 
         # 根据规则推断（fallback）
         if clean_code.startswith(('600', '601', '603', '605', '688', '689')):
@@ -502,15 +523,15 @@ class TickFlowCrawler(BaseCrawler):
             return pd.DataFrame()
 
         # 限流检查
-        wait_time = self._rate_limiter.get_wait_time()
+        wait_time = TickFlowCrawler._rate_limiter.get_wait_time()
         if wait_time > 0:
             logger.warning(f"TickFlow API 限流中，需等待 {wait_time:.1f} 秒")
             # 等待获取令牌
-            if not self._rate_limiter.acquire(timeout=wait_time + 5):
+            if not TickFlowCrawler._rate_limiter.acquire(timeout=wait_time + 5):
                 logger.error("TickFlow API 限流，无法获取调用令牌")
                 return pd.DataFrame()
         else:
-            self._rate_limiter.acquire(timeout=1.0)
+            TickFlowCrawler._rate_limiter.acquire(timeout=1.0)
 
         tf = self._get_tickflow()
         if not tf:
@@ -608,19 +629,28 @@ class TickFlowCrawler(BaseCrawler):
 
         for _, row in df.iterrows():
             # TickFlow返回的列: timestamp/trade_date, open, high, low, close, volume, amount
-            # 注意: timestamp 是毫秒时间戳
+            # 注意: timestamp 是毫秒时间戳(UTC时间)，trade_date 是北京时间日期字符串
+            # 优先使用 trade_date，因为 timestamp 按 UTC 解析会导致日期比北京时间早一天
+            trade_date = row.get('trade_date')
             ts = row.get('timestamp', row.get('trade_time', 0))
-            if isinstance(ts, (int, float)) and ts > 1e12:
-                # 毫秒时间戳转datetime
-                dt = pd.to_datetime(ts, unit='ms')
+
+            if trade_date is not None and trade_date != '':
+                # 优先使用 trade_date（北京时间日期字符串，如 "2026-05-18"）
+                dt = pd.to_datetime(trade_date)
+            elif isinstance(ts, (int, float)) and ts > 1e12:
+                # timestamp 是 UTC 毫秒时间戳，需要加8小时转为北京时间
+                dt = pd.to_datetime(ts, unit='ms') + timedelta(hours=8)
             else:
-                dt = pd.to_datetime(row.get('trade_date', ts))
+                dt = pd.to_datetime(ts)
+
+            # 调试日志：查看原始数据中的日期字段
+            logger.debug(f"原始数据日期解析: trade_date={trade_date}, timestamp={ts}, parsed_dt={dt}, open={row.get('open')}, close={row.get('close')}")
 
             # 修正日期：将非交易日的数据日期修正为向前最近的交易日
             original_dt = dt
             dt = _fix_trading_date(dt)
             if original_dt.date() != dt.date():
-                logger.info(f"日期修正: {original_dt.date()} -> {dt.date()} (非交易日修正为最近交易日)")
+                logger.info(f"日期修正: {original_dt.date()} -> {dt.date()} (非交易日修正为最近交易日), close={row.get('close')}")
 
             result.append({
                 'datetime': dt,
@@ -787,7 +817,7 @@ class TickFlowCrawler(BaseCrawler):
         self._load_universe_symbols()
 
         stocks = []
-        for sym in self._universe_symbols[:100]:  # 限制数量避免过大
+        for sym in TickFlowCrawler._universe_symbols[:100]:  # 限制数量避免过大
             short = sym.split('.')[0] if '.' in sym else sym
             stocks.append({"code": short, "name": sym})
         return stocks
@@ -811,7 +841,7 @@ class TickFlowCrawler(BaseCrawler):
             2. 返回缓存的完整代码列表
         """
         self._load_universe_symbols()
-        return self._universe_symbols
+        return TickFlowCrawler._universe_symbols
 
     def get_universe_symbols(self, universe_id: str) -> List[str]:
         """
@@ -870,4 +900,4 @@ class TickFlowCrawler(BaseCrawler):
             2. 返回映射表的副本（避免外部修改）
         """
         self._load_universe_symbols()
-        return self._symbol_map.copy()
+        return TickFlowCrawler._symbol_map.copy()

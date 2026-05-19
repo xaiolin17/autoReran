@@ -7,7 +7,7 @@ from app.core.config import settings
 
 
 class CallerFilter(logging.Filter):
-    """日志过滤器：动态添加调用者信息（模块名.函数名）"""
+    """日志过滤器：动态添加调用者信息（类名.函数名），并附加进程号、线程号"""
 
     def filter(self, record):
         # 查找实际的调用者（跳过日志相关的帧）
@@ -26,16 +26,14 @@ class CallerFilter(logging.Filter):
                 frame = frame.f_back
 
             if caller_frame:
-                module = inspect.getmodule(caller_frame)
-                module_name = module.__name__ if module else os.path.basename(caller_frame.f_code.co_filename)
                 func_name = caller_frame.f_code.co_name
 
-                # 如果是类方法，尝试获取类名
+                # 如果是类方法，尝试获取类名，只输出 类名.函数名
                 if 'self' in caller_frame.f_locals:
                     class_name = caller_frame.f_locals['self'].__class__.__name__
-                    record.caller_info = f"{module_name}.{class_name}.{func_name}"
+                    record.caller_info = f"{class_name}.{func_name}"
                 else:
-                    record.caller_info = f"{module_name}.{func_name}"
+                    record.caller_info = func_name
             else:
                 record.caller_info = record.name
         finally:
@@ -61,9 +59,9 @@ def setup_logger(name: str = "stock_analysis") -> logging.Logger:
 
     logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 
-    # 使用 caller_info 替代固定的 name
+    # 使用 caller_info 替代固定的 name，添加进程号(process)d和线程号(thread)d
     formatter = logging.Formatter(
-        "%(asctime)s - %(caller_info)s - %(levelname)s - %(message)s",
+        "%(asctime)s [PID:%(process)d TID:%(thread)d] %(caller_info)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 

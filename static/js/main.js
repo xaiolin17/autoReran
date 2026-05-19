@@ -34,8 +34,10 @@ let marks = new Map();
 /** 当前右键/点击弹出的标记菜单目标，包含 { index, dataIndex, date } */
 let markPopupTarget = null;
 
+/** 标记菜单最近一次打开的时间戳（毫秒），用于防止打开后立即被 document.click 关闭 */
+let markMenuOpenTime = 0;
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('=== DOMContentLoaded ===');
     initChart();
     initWebSocket();
     initIndicatorTabs();
@@ -149,7 +151,9 @@ function initMarkPopupMenu() {
 
     // 点击页面其他区域时关闭菜单
     document.addEventListener('click', (e) => {
-        if (!menu.contains(e.target) && e.target !== mainChart?.getZr()?.dom) {
+        // 如果菜单刚打开（100ms 内），忽略此次点击，防止右键后立即触发关闭
+        if (Date.now() - markMenuOpenTime < 150) return;
+        if (!menu.contains(e.target)) {
             menu.style.display = 'none';
             markPopupTarget = null;
         }
@@ -207,13 +211,15 @@ async function loadMarksFromDB(stockCode) {
             // 构建日期到数据索引的映射，用于快速查找
             const dateToIndex = new Map();
             currentData.forEach((d, i) => {
-                const dateStr = new Date(d.datetime).toISOString().split('T')[0];
+                // 正确处理日期字符串，避免时区问题
+                const dateStr = d.datetime.split('T')[0];
                 dateToIndex.set(dateStr, i);
             });
             
             // 遍历数据库标记，将日期匹配到对应的数据索引
             marksData.forEach(m => {
-                const dateStr = new Date(m.datetime).toISOString().split('T')[0];
+                // 正确处理日期字符串，避免时区问题
+                const dateStr = m.datetime.split('T')[0];
                 const index = dateToIndex.get(dateStr);
                 if (index !== undefined) {
                     marksMap.set(index, {
@@ -304,6 +310,7 @@ function setupEventListeners() {
             document.getElementById('progressBox').style.display = 'none';
         });
     }
+
 }
 
 /**
@@ -953,18 +960,7 @@ function initChart() {
             }
         });
 
-        // 右键点击图表：通过像素坐标转换为数据索引，打开标记菜单
-        mainChart.getZr().on('contextmenu', (event) => {
-            event.event.preventDefault();
-            const point = [event.offsetX, event.offsetY];
-            const dataIndex = mainChart.convertFromPixel({ seriesIndex: 0 }, point);
-            if (dataIndex != null && currentData && currentData[dataIndex]) {
-                showMarkPopupMenu({
-                    dataIndex: dataIndex,
-                    event: { event: { clientX: event.event.clientX, clientY: event.event.clientY } }
-                });
-            }
-        });
+        // 右键事件绑定已移至 updateCharts 中，避免 setOption(true) 重建 canvas 后事件丢失
     }
 
     // 窗口大小变化时自动调整图表尺寸
@@ -993,8 +989,9 @@ function showMarkPopupMenu(params) {
     if (!menu) return;
 
     // 提取日期并格式化为 yyyy-MM-dd，构建标记目标对象
+    // 直接截取日期部分，避免 new Date() 的时区问题
     const dateStr = currentData[params.dataIndex].datetime;
-    const date = new Date(dateStr).toISOString().split('T')[0];
+    const date = dateStr.split('T')[0];
     markPopupTarget = { index: params.dataIndex, dataIndex: params.dataIndex, date: date };
 
     // 获取图表位置和鼠标坐标
@@ -1015,6 +1012,7 @@ function showMarkPopupMenu(params) {
     menu.style.left = `${left}px`;
     menu.style.top = `${top}px`;
     menu.style.display = 'flex';
+    markMenuOpenTime = Date.now();
 }
 
 /**
@@ -1081,7 +1079,7 @@ async function loadData() {
         // 关键修复：只要 missingRanges.length > 0 就触发下载，不管 data 是否为空
         if (missingRanges.length > 0) {
             const downloadStart = missingRanges[0].start;  // 最早的缺失起点
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
 
             showMessage('检测到数据缺失，后台下载中...', 'info');
 
@@ -1393,10 +1391,16 @@ function updateCharts(data) {
             if (index < sortedData.length) {
                 const d = sortedData[index];
                 const isBuy = mark.type === 'buy';
+                // 计算标记的垂直偏移量，避免与K线重合
+                // 买入标记在最低价下方，卖出标记在最高价上方
+                // 偏移量为K线实体范围的2%，确保标记完全脱离K线
+                const priceRange = d.high_price - d.low_price;
+                const offset = priceRange > 0 ? priceRange * 0.15 : d.high_price * 0.005;
+                const markPrice = isBuy ? d.low_price - offset : d.high_price + offset;
+
                 markSeriesData.push({
                     name: isBuy ? '买入' : '卖出',
-                    // 买入标记在最低价下方，卖出标记在最高价上方
-                    value: [index, isBuy ? d.low_price : d.high_price],
+                    value: [index, markPrice],
                     symbol: isBuy ? 'triangle' : 'triangle',
                     symbolRotate: isBuy ? 0 : 180,  // 买入正三角，卖出倒三角
                     symbolSize: 14,
@@ -1426,7 +1430,8 @@ function updateCharts(data) {
                 xAxisIndex: 0,
                 yAxisIndex: 0,
                 data: markSeriesData,
-                zlevel: 10,  // 确保标记在最上层
+                zlevel: 10,
+                z: 100,  // 确保标记在最上层，z值越大越在上层
                 emphasis: {
                     scale: 1.5
                 }
@@ -1436,4 +1441,57 @@ function updateCharts(data) {
 
     // 应用配置到图表（true 表示不合并，完全替换）
     mainChart.setOption(option, true);
+
+    // 每次渲染后重新绑定右键事件，因为 setOption(true) 会重建 canvas 导致事件丢失
+    bindChartContextMenu();
+}
+
+/**
+ * 绑定图表右键菜单事件
+ * 功能：在 ECharts 图表容器上绑定原生 contextmenu 事件
+ * 参数：无
+ * 返回值：无
+ * 调用关系：被 updateCharts 每次渲染后调用
+ * 关键逻辑：
+ *   - 绑定到图表容器 div 上（而非 canvas），使用捕获阶段确保优先处理
+ *   - ECharts 渲染后的 canvas 在容器内部，事件会冒泡到容器
+ *   - 通过 getBoundingClientRect 计算准确的相对坐标
+ *   - 使用 convertFromPixel 将像素坐标转换为数据索引
+ */
+function bindChartContextMenu() {
+    const chartDom = document.getElementById('mainChart');
+    if (!chartDom || !mainChart) return;
+
+    // 如果已绑定过，先移除旧监听器避免重复
+    if (chartDom._contextMenuBound) {
+        chartDom.removeEventListener('contextmenu', chartDom._contextMenuHandler, true);
+    }
+
+    const handleContextMenu = (e) => {
+        // 阻止浏览器默认右键菜单
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 计算相对于图表容器的坐标
+        const rect = chartDom.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const point = [x, y];
+        const convertResult = mainChart.convertFromPixel({ seriesIndex: 0 }, point);
+        // convertFromPixel 返回 [dataIndex, value] 数组，取第一个元素作为数据索引
+        const dataIndex = Array.isArray(convertResult) ? convertResult[0] : convertResult;
+
+        if (dataIndex != null && currentData && currentData[dataIndex]) {
+            showMarkPopupMenu({
+                dataIndex: dataIndex,
+                event: { event: { clientX: e.clientX, clientY: e.clientY } }
+            });
+        }
+    };
+
+    // 绑定到容器（捕获阶段），这样 canvas 内部的事件会冒泡到这里
+    chartDom.addEventListener('contextmenu', handleContextMenu, true);
+    chartDom._contextMenuBound = true;
+    chartDom._contextMenuHandler = handleContextMenu;
 }

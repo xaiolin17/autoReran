@@ -82,10 +82,18 @@ def _run_initialization_task():
         if start_date_str is None:
             return
         
-        # 使用短代码调用（内部会自动映射为完整代码）
-        saved_data = service.fetch_and_save_stock_data(
-            stock_code, period, start_date=start_date_str, end_date=end_date_str
-        )
+        # 判断是否需要获取今天的数据：如果是当天单独获取，使用实时接口
+        today_str = today.strftime("%Y%m%d")
+        if start_date_str == end_date_str == today_str:
+            _send_progress_ws(stock_code, "downloading", 20, f"获取今日实时数据: {today_str}")
+            saved_data = service.fetch_and_save_stock_data(
+                stock_code, period, start_date=start_date_str, end_date=end_date_str, source="realtime"
+            )
+        else:
+            # 使用短代码调用（内部会自动映射为完整代码）
+            saved_data = service.fetch_and_save_stock_data(
+                stock_code, period, start_date=start_date_str, end_date=end_date_str
+            )
         
         if saved_data:
             _send_progress_ws(stock_code, "calculating", 70, f"已下载 {len(saved_data)} 条记录，正在计算指标...")
