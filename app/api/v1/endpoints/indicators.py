@@ -21,7 +21,6 @@ def get_stock_data_with_indicators(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: Optional[int] = None,  # 有日期范围时不使用 limit，优先保证日期范围完整
-    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -52,13 +51,11 @@ def get_stock_data_with_indicators(
         1. 从StockData或StockCode表查询股票中文名称
         2. 有日期范围时取消limit限制，确保缺失检测完整
         3. 调用IndicatorService获取数据及缺失范围
-        4. 若有缺失数据且提供background_tasks，启动后台下载任务
-        5. 通过WebSocket通知前端下载进度
+        4. 返回数据和缺失范围给前端，由前端决定如何下载
     """
     logger.info(f"获取股票指标数据请求: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
-    
+
     service = IndicatorService(db)
-    stock_service = StockService(db)
 
     # 查询股票名称（从 StockData 记录中获取中文名称）
     stock_name = None
@@ -103,30 +100,15 @@ def get_stock_data_with_indicators(
 
     result = service.get_stock_data_with_indicators(stock_code, period, start_date, end_date, limit)
     # result: {"data": [...], "missing_ranges": [...]}
-    
+
     # 添加股票代码和名称信息到响应
     result["stock_code"] = stock_code
     result["stock_name"] = stock_name or stock_code
-    
+
     logger.info(f"查询结果: 数据条数={len(result.get('data', []))}, 缺失范围数量={len(result.get('missing_ranges', []))}")
-    
-    # 如果有缺失范围，启动后台下载任务
-    if result.get("missing_ranges") and background_tasks:
-        task_id = f"{stock_code}_{period}_{datetime.now().timestamp()}_{len(result['missing_ranges'])}"
-        task_status[task_id] = {
-            "status": "starting",
-            "progress": 0,
-            "message": f"检测到{len(result['missing_ranges'])}个缺失数据范围，开始下载..."
-        }
-        
-        logger.info(f"启动后台下载任务: task_id={task_id}, 缺失范围={result['missing_ranges']}")
-        
-        # 启动后台下载任务
-        background_tasks.add_task(_download_missing_ranges_task, stock_code, period, result["missing_ranges"], task_id)
-        
-        # 添加任务ID到响应
-        result["download_task_id"] = task_id
-    
+
+    # 注意：后台下载由前端通过 /api/v1/stocks/fetch-async/ 触发，避免前后端同时下载导致重复数据
+
     logger.info(f"股票指标数据请求完成: stock_code={stock_code}")
     return result
 

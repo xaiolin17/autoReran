@@ -441,60 +441,64 @@ class StockService:
                 logger.info(f"按日期去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
 
         for _, row in cleaned_data.iterrows():
-            existing = self.db.query(StockData).filter(
-                StockData.stock_code == row['stock_code'],
-                StockData.period == row['period'],
-                StockData.datetime == row['datetime']
-            ).first()
+            try:
+                existing = self.db.query(StockData).filter(
+                    StockData.stock_code == row['stock_code'],
+                    StockData.period == row['period'],
+                    StockData.datetime == row['datetime']
+                ).first()
 
-            if not existing:
-                stock_data = StockData(
-                    stock_code=row['stock_code'],
-                    stock_name=row.get('stock_name'),
-                    period=row['period'],
-                    datetime=row['datetime'],
-                    open_price=row['open_price'],
-                    high_price=row['high_price'],
-                    low_price=row['low_price'],
-                    close_price=row['close_price'],
-                    volume=row['volume'],
-                    amount=row.get('amount'),
-                    source=row.get('source', 'tickflow')
-                )
-                self.db.add(stock_data)
-                saved_stocks.append(stock_data)
-            else:
-                # 检查数据是否有变化，有则更新
-                has_changes = False
-                fields = [
-                    ('open_price', row.get('open_price')),
-                    ('high_price', row.get('high_price')),
-                    ('low_price', row.get('low_price')),
-                    ('close_price', row.get('close_price')),
-                    ('volume', row.get('volume')),
-                    ('amount', row.get('amount')),
-                    ('stock_name', row.get('stock_name')),
-                    ('source', row.get('source', 'tickflow'))
-                ]
+                if not existing:
+                    stock_data = StockData(
+                        stock_code=row['stock_code'],
+                        stock_name=row.get('stock_name'),
+                        period=row['period'],
+                        datetime=row['datetime'],
+                        open_price=row['open_price'],
+                        high_price=row['high_price'],
+                        low_price=row['low_price'],
+                        close_price=row['close_price'],
+                        volume=row['volume'],
+                        amount=row.get('amount'),
+                        source=row.get('source', 'tickflow')
+                    )
+                    self.db.add(stock_data)
+                    saved_stocks.append(stock_data)
+                else:
+                    # 检查数据是否有变化，有则更新
+                    has_changes = False
+                    fields = [
+                        ('open_price', row.get('open_price')),
+                        ('high_price', row.get('high_price')),
+                        ('low_price', row.get('low_price')),
+                        ('close_price', row.get('close_price')),
+                        ('volume', row.get('volume')),
+                        ('amount', row.get('amount')),
+                        ('stock_name', row.get('stock_name')),
+                        ('source', row.get('source', 'tickflow'))
+                    ]
 
-                for field_name, new_value in fields:
-                    # 强制刷新模式下：下载数据为空则跳过该字段不更新
-                    if new_value is None:
-                        continue
-                    old_value = getattr(existing, field_name)
-                    # 处理浮点数比较
-                    if isinstance(new_value, float) and isinstance(old_value, float):
-                        if abs(new_value - old_value) > 0.0001:
+                    for field_name, new_value in fields:
+                        # 强制刷新模式下：下载数据为空则跳过该字段不更新
+                        if new_value is None:
+                            continue
+                        old_value = getattr(existing, field_name)
+                        # 处理浮点数比较
+                        if isinstance(new_value, float) and isinstance(old_value, float):
+                            if abs(new_value - old_value) > 0.0001:
+                                setattr(existing, field_name, new_value)
+                                has_changes = True
+                        elif new_value != old_value:
                             setattr(existing, field_name, new_value)
                             has_changes = True
-                    elif new_value != old_value:
-                        setattr(existing, field_name, new_value)
-                        has_changes = True
 
-                if has_changes:
-                    updated_count += 1
-                else:
-                    skipped_count += 1
+                    if has_changes:
+                        updated_count += 1
+                    else:
+                        skipped_count += 1
+            except Exception as e:
+                logger.warning(f"处理单条数据时出错，跳过: {e}")
+                continue
 
         logger.info(f"新增 {len(saved_stocks)} 条，更新 {updated_count} 条，跳过 {skipped_count} 条相同数据")
 

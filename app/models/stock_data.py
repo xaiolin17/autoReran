@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -20,6 +20,11 @@ class StockData(Base):
     表名: stock_data
     """
     __tablename__ = "stock_data"
+
+    # 唯一索引：同一股票同一周期同一天只能有一条数据
+    __table_args__ = (
+        UniqueConstraint('stock_code', 'period', 'datetime', name='uix_stock_period_datetime'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     stock_code = Column(String(20), index=True, nullable=False)

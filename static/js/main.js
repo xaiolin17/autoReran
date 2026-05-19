@@ -1478,11 +1478,37 @@ function bindChartContextMenu() {
         const y = e.clientY - rect.top;
 
         const point = [x, y];
-        const convertResult = mainChart.convertFromPixel({ seriesIndex: 0 }, point);
-        // convertFromPixel 返回 [dataIndex, value] 数组，取第一个元素作为数据索引
-        const dataIndex = Array.isArray(convertResult) ? convertResult[0] : convertResult;
 
-        if (dataIndex != null && currentData && currentData[dataIndex]) {
+        // 尝试多种方式获取 dataIndex
+        let dataIndex = null;
+
+        // 方式1: 使用 seriesIndex (适用于 candlestick 系列)
+        const convertResult1 = mainChart.convertFromPixel({ seriesIndex: 0 }, point);
+        if (Array.isArray(convertResult1) && convertResult1[0] != null && !isNaN(convertResult1[0])) {
+            dataIndex = Math.round(convertResult1[0]);
+        }
+
+        // 方式2: 使用 gridIndex (如果方式1失败)
+        if (dataIndex == null || isNaN(dataIndex)) {
+            const convertResult2 = mainChart.convertFromPixel({ gridIndex: 0 }, point);
+            if (Array.isArray(convertResult2) && convertResult2[0] != null && !isNaN(convertResult2[0])) {
+                dataIndex = Math.round(convertResult2[0]);
+            }
+        }
+
+        // 方式3: 使用 xAxisIndex (如果前两种方式都失败)
+        if (dataIndex == null || isNaN(dataIndex)) {
+            const convertResult3 = mainChart.convertFromPixel({ xAxisIndex: 0 }, point);
+            if (convertResult3 != null && !isNaN(convertResult3)) {
+                dataIndex = typeof convertResult3 === 'number' ? Math.round(convertResult3) : Math.round(convertResult3[0]);
+            }
+        }
+
+        console.log('右键点击坐标:', { x, y, dataIndex });
+        console.log('当前数据长度:', currentData?.length);
+        console.log('对应数据:', currentData?.[dataIndex]);
+
+        if (dataIndex != null && !isNaN(dataIndex) && dataIndex >= 0 && dataIndex < currentData.length && currentData[dataIndex]) {
             showMarkPopupMenu({
                 dataIndex: dataIndex,
                 event: { event: { clientX: e.clientX, clientY: e.clientY } }
