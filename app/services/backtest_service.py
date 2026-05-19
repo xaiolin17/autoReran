@@ -41,9 +41,7 @@ class BacktestService:
         if request.model_id:
             signals = self._generate_model_signals(df, request.model_id)
         else:
-            signals = self._generate_signals(
-                df, request.strategy_name, request.params or {}
-            )
+            signals = self._generate_signals(df, request.strategy_name, request.params or {})
 
         backtest_result = self._execute_trades(df, signals, request.initial_capital)
 
@@ -108,11 +106,7 @@ class BacktestService:
                 available_features.append(column_mapping[col])
 
         if len(available_features) == 0:
-            available_features = [
-                col
-                for col in ["open", "high", "low", "close", "volume"]
-                if col in df.columns
-            ]
+            available_features = [col for col in ["open", "high", "low", "close", "volume"] if col in df.columns]
 
         # 确定价格列 - 优先使用 close_price，否则用 close
         price_col = "close_price" if "close_price" in df.columns else "close"
@@ -160,9 +154,7 @@ class BacktestService:
         signals.sort(key=lambda x: x["datetime"])
         return signals
 
-    def _generate_signals(
-        self, df: pd.DataFrame, strategy_name: str, params: Dict
-    ) -> List[Dict]:
+    def _generate_signals(self, df: pd.DataFrame, strategy_name: str, params: Dict) -> List[Dict]:
         signals = []
 
         if strategy_name == "KDJ":
@@ -216,9 +208,7 @@ class BacktestService:
         signals.sort(key=lambda x: x["datetime"])
         return signals
 
-    def _execute_trades(
-        self, df: pd.DataFrame, signals: List[Dict], initial_capital: float
-    ) -> Dict:
+    def _execute_trades(self, df: pd.DataFrame, signals: List[Dict], initial_capital: float) -> Dict:
         capital = initial_capital
         position = 0
         entry_price = 0
@@ -285,9 +275,7 @@ class BacktestService:
         days = (df.iloc[-1]["datetime"] - df.iloc[0]["datetime"]).days
         annual_return = 0
         if days > 0:
-            annual_return = (
-                (final_capital / initial_capital) ** (365 / days) - 1
-            ) * 100
+            annual_return = ((final_capital / initial_capital) ** (365 / days) - 1) * 100
 
         winning_trades = 0
         losing_trades = 0
@@ -349,18 +337,10 @@ class BacktestService:
         return query.order_by(BacktestResult.created_at.desc()).all()
 
     def get_backtest(self, backtest_id: int) -> Optional[BacktestResult]:
-        return (
-            self.db.query(BacktestResult)
-            .filter(BacktestResult.id == backtest_id)
-            .first()
-        )
+        return self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
 
     def delete_backtest(self, backtest_id: int) -> bool:
-        db_backtest = (
-            self.db.query(BacktestResult)
-            .filter(BacktestResult.id == backtest_id)
-            .first()
-        )
+        db_backtest = self.db.query(BacktestResult).filter(BacktestResult.id == backtest_id).first()
         if db_backtest:
             self.db.delete(db_backtest)
             self.db.commit()

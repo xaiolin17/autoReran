@@ -6,11 +6,13 @@
 
 # 导入日期时间处理模块
 from datetime import datetime, timedelta
+
 # Optional 用于类型注解，表示返回值可能为 None
 from typing import Optional
 
 # jose 库：处理 JWT（JSON Web Token）的编码与解码
 from jose import JWTError, jwt
+
 # passlib 库：处理密码哈希（bcrypt 等算法）
 from passlib.context import CryptContext
 
@@ -85,18 +87,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         # 否则使用配置文件中设定的默认过期分钟数
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     # 将过期时间添加到待编码的字典中（标准 JWT 声明使用 "exp" 字段）
     to_encode.update({"exp": expire})
 
     # 使用 jose 库的 jwt.encode 进行编码
     # 参数: payload, secret key, 算法（默认为 HS256）
-    encoded_jwt = jwt.encode(
-        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 

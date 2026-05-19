@@ -26,9 +26,7 @@ class MLService:
         os.makedirs(self.models_dir, exist_ok=True)
 
     def train_model(self, request: TrainingRequest) -> MLModel:
-        stock_data = self.stock_service.get_stock_data(
-            request.stock_code, "1d", limit=1000
-        )
+        stock_data = self.stock_service.get_stock_data(request.stock_code, "1d", limit=1000)
 
         if len(stock_data) < 100:
             raise ValueError("数据量不足，至少需要100条数据")
@@ -101,11 +99,7 @@ class MLService:
                 available_features.append(column_mapping[col])
 
         if len(available_features) == 0:
-            available_features = [
-                col
-                for col in ["open", "high", "low", "close", "volume"]
-                if col in df.columns
-            ]
+            available_features = [col for col in ["open", "high", "low", "close", "volume"] if col in df.columns]
 
         # 确定目标列 - 优先使用 close_price，否则用 close
         target_col = "close_price" if "close_price" in df.columns else "close"
@@ -119,9 +113,7 @@ class MLService:
         X = df[available_features]
         y = df["target"]
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, train_size=request.train_size, shuffle=False
-        )
+        X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=request.train_size, shuffle=False)
 
         if request.model_type == "RandomForest":
             model = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -146,16 +138,12 @@ class MLService:
         db_ml_model.feature_columns = available_features
         db_ml_model.target_column = target_col
         db_ml_model.file_path = model_path
-        db_ml_model.description = (
-            f"Model trained with {len(X_train)} samples. R2: {r2:.4f}"
-        )
+        db_ml_model.description = f"Model trained with {len(X_train)} samples. R2: {r2:.4f}"
         db_ml_model.accuracy = r2
         db_ml_model.precision = 1 - mae / y.mean() if y.mean() != 0 else 0
         db_ml_model.recall = 1 - np.sqrt(mse) / y.mean() if y.mean() != 0 else 0
         db_ml_model.f1_score = (
-            2
-            * (db_ml_model.precision * db_ml_model.recall)
-            / (db_ml_model.precision + db_ml_model.recall)
+            2 * (db_ml_model.precision * db_ml_model.recall) / (db_ml_model.precision + db_ml_model.recall)
             if (db_ml_model.precision + db_ml_model.recall) > 0
             else 0
         )
@@ -201,9 +189,7 @@ class MLService:
         prediction = model.predict(latest_data)[0]
 
         # 获取当前价格
-        target_col = db_model.target_column or (
-            "close_price" if "close_price" in df.columns else "close"
-        )
+        target_col = db_model.target_column or ("close_price" if "close_price" in df.columns else "close")
         current_price = df.iloc[-1][target_col]
         change_percent = ((prediction - current_price) / current_price) * 100
 

@@ -126,13 +126,7 @@ def lru_cache(
 
             filtered_kwargs = {k: v for k, v in kwargs.items() if k not in exclude_args}
 
-            key = (
-                key_prefix
-                + ":"
-                + func.__name__
-                + ":"
-                + make_cache_key(*args, **filtered_kwargs)
-            )
+            key = key_prefix + ":" + func.__name__ + ":" + make_cache_key(*args, **filtered_kwargs)
 
             cached_result = cache.get(key)
             if cached_result is not None:

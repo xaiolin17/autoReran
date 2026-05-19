@@ -61,9 +61,7 @@ class StockService:
         if "." in stock_code:
             return stock_code
         # 查询数据库获取完整代码
-        code_record = (
-            self.db.query(StockCode).filter(StockCode.code == stock_code).first()
-        )
+        code_record = self.db.query(StockCode).filter(StockCode.code == stock_code).first()
         if code_record:
             return code_record.name
         #  fallback: 使用爬虫的映射
@@ -102,9 +100,7 @@ class StockService:
             4. 按 datetime 升序排列，若指定 limit 则限制返回条数
         """
         stock_code = self._resolve_stock_code(stock_code)
-        query = self.db.query(StockData).filter(
-            StockData.stock_code == stock_code, StockData.period == period
-        )
+        query = self.db.query(StockData).filter(StockData.stock_code == stock_code, StockData.period == period)
 
         if start_date:
             query = query.filter(StockData.datetime >= start_date)
@@ -163,11 +159,7 @@ class StockService:
             2. 通过判断 count > 0 返回布尔结果
         """
         stock_code = self._resolve_stock_code(stock_code)
-        count = (
-            self.db.query(StockData)
-            .filter(StockData.stock_code == stock_code, StockData.period == period)
-            .count()
-        )
+        count = self.db.query(StockData).filter(StockData.stock_code == stock_code, StockData.period == period).count()
         return count > 0
 
     def get_latest_date(self, stock_code: str, period: str) -> Optional[datetime]:
@@ -222,9 +214,7 @@ class StockService:
         stock_code = self._resolve_stock_code(stock_code)
         try:
             count = (
-                self.db.query(StockData)
-                .filter(StockData.stock_code == stock_code, StockData.period == period)
-                .delete()
+                self.db.query(StockData).filter(StockData.stock_code == stock_code, StockData.period == period).delete()
             )
             self.db.commit()
             logger.info(f"已删除 {stock_code} {period} 的 {count} 条数据")
@@ -292,16 +282,12 @@ class StockService:
                 )
 
                 for (id_to_delete,) in ids_to_delete:
-                    self.db.query(StockData).filter(
-                        StockData.id == id_to_delete
-                    ).delete()
+                    self.db.query(StockData).filter(StockData.id == id_to_delete).delete()
                     deleted_count += 1
 
             self.db.commit()
             if deleted_count > 0:
-                logger.info(
-                    f"已清理 {stock_code} {period} 的 {deleted_count} 条重复数据"
-                )
+                logger.info(f"已清理 {stock_code} {period} 的 {deleted_count} 条重复数据")
             return deleted_count
         except Exception as e:
             logger.error(f"清理重复数据失败: {e}")
@@ -378,18 +364,14 @@ class StockService:
         """
         # 获取完整代码和名称用于日志显示
         full_symbol = (
-            self.crawler.get_full_symbol(stock_code)
-            if hasattr(self.crawler, "get_full_symbol")
-            else stock_code
+            self.crawler.get_full_symbol(stock_code) if hasattr(self.crawler, "get_full_symbol") else stock_code
         )
         display_code = full_symbol if full_symbol else stock_code
 
         # 查询股票名称
         stock_name = ""
         try:
-            name_record = (
-                self.db.query(StockCode).filter(StockCode.name == display_code).first()
-            )
+            name_record = self.db.query(StockCode).filter(StockCode.name == display_code).first()
             if name_record and name_record.category:
                 category_map = {
                     "stock": "A股",
@@ -399,9 +381,7 @@ class StockService:
                     "hk_stock": "港股",
                     "us_stock": "美股",
                 }
-                stock_name = (
-                    f"[{category_map.get(name_record.category, name_record.category)}]"
-                )
+                stock_name = f"[{category_map.get(name_record.category, name_record.category)}]"
         except Exception:
             pass
 
@@ -417,16 +397,10 @@ class StockService:
             if latest_date:
                 latest_date_only = latest_date.date()
                 if latest_date_only >= today:
-                    logger.info(
-                        "已有数据已是最新 (截止 "
-                        + str(latest_date_only)
-                        + ")，无需更新"
-                    )
+                    logger.info("已有数据已是最新 (截止 " + str(latest_date_only) + ")，无需更新")
                     return []
 
-                actual_start_date = (latest_date_only + timedelta(days=1)).strftime(
-                    "%Y%m%d"
-                )
+                actual_start_date = (latest_date_only + timedelta(days=1)).strftime("%Y%m%d")
                 logger.info(
                     "增量更新: 从 "
                     + actual_start_date
@@ -507,9 +481,7 @@ class StockService:
             original_dt = row["datetime"]
             fixed_dt = _fix_trading_date(original_dt)
             if original_dt.date() != fixed_dt.date():
-                logger.info(
-                    f"保存前日期修正: {original_dt.date()} -> {fixed_dt.date()} (非交易日修正为最近交易日)"
-                )
+                logger.info(f"保存前日期修正: {original_dt.date()} -> {fixed_dt.date()} (非交易日修正为最近交易日)")
                 cleaned_data.at[idx, "datetime"] = fixed_dt
 
         # 按日期去重：同一天保留时间较晚的数据（16:00:00 优先于 00:00:00）
@@ -517,9 +489,7 @@ class StockService:
             cleaned_data["_date"] = cleaned_data["datetime"].dt.date
             before_dedup = len(cleaned_data)
             cleaned_data = (
-                cleaned_data.sort_values("datetime")
-                .groupby(["stock_code", "period", "_date"], as_index=False)
-                .last()
+                cleaned_data.sort_values("datetime").groupby(["stock_code", "period", "_date"], as_index=False).last()
             )
             cleaned_data = cleaned_data.drop(columns=["_date"])
             after_dedup = len(cleaned_data)
@@ -574,9 +544,7 @@ class StockService:
                             continue
                         old_value = getattr(existing, field_name)
                         # 处理浮点数比较
-                        if isinstance(new_value, float) and isinstance(
-                            old_value, float
-                        ):
+                        if isinstance(new_value, float) and isinstance(old_value, float):
                             if abs(new_value - old_value) > 0.0001:
                                 setattr(existing, field_name, new_value)
                                 has_changes = True
@@ -592,9 +560,7 @@ class StockService:
                 logger.warning(f"处理单条数据时出错，跳过: {e}")
                 continue
 
-        logger.info(
-            f"新增 {len(saved_stocks)} 条，更新 {updated_count} 条，跳过 {skipped_count} 条相同数据"
-        )
+        logger.info(f"新增 {len(saved_stocks)} 条，更新 {updated_count} 条，跳过 {skipped_count} 条相同数据")
 
         try:
             self.db.commit()
@@ -606,9 +572,7 @@ class StockService:
             self.db.rollback()
             return []
 
-        logger.info(
-            f"股票数据获取和保存完成: stock_code={display_code}{stock_name}, 新增数据条数={len(saved_stocks)}"
-        )
+        logger.info(f"股票数据获取和保存完成: stock_code={display_code}{stock_name}, 新增数据条数={len(saved_stocks)}")
         return saved_stocks
 
     def initialize_default_data(self, stock_code: str = "000001.SH") -> bool:
@@ -656,9 +620,7 @@ class StockService:
             logger.error(f"初始化默认数据失败: {e}")
             return False
 
-    def get_latest_stock_data(
-        self, stock_code: str, period: str = "1d"
-    ) -> Optional[StockData]:
+    def get_latest_stock_data(self, stock_code: str, period: str = "1d") -> Optional[StockData]:
         """
         获取指定股票代码和周期的最新一条数据记录。
 
@@ -821,19 +783,14 @@ class StockService:
         # 同时匹配短代码和完整代码
         records = (
             self.db.query(StockCode)
-            .filter(
-                (StockCode.code.like(f"%{keyword}%"))
-                | (StockCode.name.like(f"%{keyword}%"))
-            )
+            .filter((StockCode.code.like(f"%{keyword}%")) | (StockCode.name.like(f"%{keyword}%")))
             .limit(limit)
             .all()
         )
 
         result = []
         for r in records:
-            result.append(
-                {"code": r.code, "name": r.name, "category": r.category or ""}
-            )
+            result.append({"code": r.code, "name": r.name, "category": r.category or ""})
         return result
 
     def save_stock_codes(self, symbols: List[str], category: str = ""):
@@ -866,9 +823,7 @@ class StockService:
             short = sym.split(".")[0] if "." in sym else sym
             try:
                 # 以完整代码（name）为唯一键查询
-                existing = (
-                    self.db.query(StockCode).filter(StockCode.name == sym).first()
-                )
+                existing = self.db.query(StockCode).filter(StockCode.name == sym).first()
                 if not existing:
                     stock_code = StockCode(
                         code=short,
@@ -891,13 +846,9 @@ class StockService:
         if count > 0:
             self.db.commit()
         if error_count > 0:
-            logger.info(
-                f"保存了 {count} 条，跳过 {skip_count} 条重复，{error_count} 条错误"
-            )
+            logger.info(f"保存了 {count} 条，跳过 {skip_count} 条重复，{error_count} 条错误")
         elif skip_count > 0:
-            logger.info(
-                f"保存了 {count} 条股票代码映射到数据库（跳过 {skip_count} 条重复）"
-            )
+            logger.info(f"保存了 {count} 条股票代码映射到数据库（跳过 {skip_count} 条重复）")
         else:
             logger.info(f"保存了 {count} 条股票代码映射到数据库")
 

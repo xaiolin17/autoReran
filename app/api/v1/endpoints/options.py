@@ -22,12 +22,8 @@ def get_option_chain(stock_code: str, expire_date: Optional[str] = None):
 
         # 如果指定了到期日，只返回该到期日的数据
         if expire_date:
-            filtered_calls = [
-                opt for opt in option_chain.calls if opt.expire_date == expire_date
-            ]
-            filtered_puts = [
-                opt for opt in option_chain.puts if opt.expire_date == expire_date
-            ]
+            filtered_calls = [opt for opt in option_chain.calls if opt.expire_date == expire_date]
+            filtered_puts = [opt for opt in option_chain.puts if opt.expire_date == expire_date]
             option_chain.calls = filtered_calls
             option_chain.puts = filtered_puts
 
@@ -60,25 +56,17 @@ def get_option_summary(stock_code: str):
                 strike_oi[strike] = 0
             strike_oi[strike] += opt.open_interest or 0
 
-        max_pain_strike = (
-            max(strike_oi.items(), key=lambda x: x[1])[0] if strike_oi else None
-        )
+        max_pain_strike = max(strike_oi.items(), key=lambda x: x[1])[0] if strike_oi else None
 
         return {
             "stock_code": stock_code,
             "stock_price": option_chain.stock_price,
             "total_call_volume": total_call_volume,
             "total_put_volume": total_put_volume,
-            "call_put_volume_ratio": (
-                round(total_call_volume / total_put_volume, 2)
-                if total_put_volume > 0
-                else 0
-            ),
+            "call_put_volume_ratio": (round(total_call_volume / total_put_volume, 2) if total_put_volume > 0 else 0),
             "total_call_oi": total_call_oi,
             "total_put_oi": total_put_oi,
-            "call_put_oi_ratio": (
-                round(total_call_oi / total_put_oi, 2) if total_put_oi > 0 else 0
-            ),
+            "call_put_oi_ratio": (round(total_call_oi / total_put_oi, 2) if total_put_oi > 0 else 0),
             "max_pain_strike": max_pain_strike,
             "update_time": option_chain.update_time,
         }

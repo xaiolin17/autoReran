@@ -72,9 +72,7 @@ class CrawlerScheduler:
             # 将短代码转换为完整代码
             query_code = stock_code
             if "." not in stock_code:
-                code_record = (
-                    db.query(StockCode).filter(StockCode.code == stock_code).first()
-                )
+                code_record = db.query(StockCode).filter(StockCode.code == stock_code).first()
                 if code_record:
                     query_code = code_record.name
 
@@ -89,9 +87,7 @@ class CrawlerScheduler:
             if latest:
                 start_date = (latest.datetime + timedelta(days=1)).strftime("%Y%m%d")
 
-            tickflow_data = self.tickflow_crawler.fetch_stock_data(
-                stock_code, period="1d", start_date=start_date
-            )
+            tickflow_data = self.tickflow_crawler.fetch_stock_data(stock_code, period="1d", start_date=start_date)
 
             if not tickflow_data.empty:
                 cleaned_data = self.data_processor.clean_data(tickflow_data)
@@ -147,9 +143,7 @@ class CrawlerScheduler:
                     for field_name, new_value in fields:
                         if new_value is not None:
                             old_value = getattr(existing, field_name)
-                            if isinstance(new_value, float) and isinstance(
-                                old_value, float
-                            ):
+                            if isinstance(new_value, float) and isinstance(old_value, float):
                                 if abs(new_value - old_value) > 0.0001:
                                     setattr(existing, field_name, new_value)
                             elif new_value != old_value:

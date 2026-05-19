@@ -1,20 +1,27 @@
 # 导入 FastAPI 路由核心组件
 from fastapi import APIRouter, Depends, HTTPException, status
+
 # OAuth2 密码流表单依赖（用于接收 username/password 表单数据）
 from fastapi.security import OAuth2PasswordRequestForm
+
 # SQLAlchemy 数据库会话类型
 from sqlalchemy.orm import Session
 
 # 依赖项（如获取当前用户）
 from app.api import deps
+
 # 数据库会话依赖函数（用于获取数据库会话）
 from app.core.database import get_db
+
 # JWT 令牌创建函数 & 密码验证函数
 from app.core.security import create_access_token
+
 # 令牌响应的 Pydantic 模型
 from app.schemas.token import Token
+
 # 用户相关的 Pydantic 模型（请求体和响应体）
 from app.schemas.user import UserCreate, UserOut
+
 # 用户业务逻辑层（数据库操作）
 from app.services import user_service
 

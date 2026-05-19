@@ -6,8 +6,7 @@ from app.core.logger import logger
 
 # 尝试导入 Prometheus，如果不可用则提供空实现
 try:
-    from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge,
-                                   Histogram, generate_latest)
+    from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
     PROMETHEUS_AVAILABLE = True
 
@@ -26,9 +25,7 @@ try:
     )
 
     # 活跃请求数
-    ACTIVE_REQUESTS = Gauge(
-        "http_active_requests", "Number of active HTTP requests", ["method", "endpoint"]
-    )
+    ACTIVE_REQUESTS = Gauge("http_active_requests", "Number of active HTTP requests", ["method", "endpoint"])
 
     # 股票数据获取次数
     STOCK_DATA_FETCHES = Counter(
@@ -52,9 +49,7 @@ try:
     )
 
     # Celery 任务状态
-    CELERY_TASKS = Counter(
-        "celery_tasks_total", "Total number of Celery tasks", ["task_type", "status"]
-    )
+    CELERY_TASKS = Counter("celery_tasks_total", "Total number of Celery tasks", ["task_type", "status"])
 
     # 数据库连接数
     DB_CONNECTIONS = Gauge("db_connections", "Number of database connections")
@@ -83,9 +78,7 @@ async def metrics_middleware(request: Request, call_next):
         status_code = str(response.status_code)
 
         # 记录请求计数
-        REQUEST_COUNT.labels(
-            method=method, endpoint=endpoint, status_code=status_code
-        ).inc()
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
 
         # 记录请求耗时
         duration = time.time() - start_time

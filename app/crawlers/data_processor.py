@@ -44,9 +44,7 @@ class DataProcessor:
         return merged
 
     @staticmethod
-    def average_data(
-        data_list: List[pd.DataFrame], method: str = "mean"
-    ) -> pd.DataFrame:
+    def average_data(data_list: List[pd.DataFrame], method: str = "mean") -> pd.DataFrame:
         """
         对多个DataFrame按分组进行聚合计算
 
@@ -167,22 +165,14 @@ class DataProcessor:
             df = df.drop_duplicates(subset=dup_cols_available, keep="first")
             after_dedup = len(df)
             if before_dedup != after_dedup:
-                print(
-                    "[DataProcessor] 去重: 从 "
-                    + str(before_dedup)
-                    + " 条减少到 "
-                    + str(after_dedup)
-                    + " 条"
-                )
+                print("[DataProcessor] 去重: 从 " + str(before_dedup) + " 条减少到 " + str(after_dedup) + " 条")
 
         # 修正日期：将所有非交易日的数据日期修正为向前最近的交易日
         if "datetime" in df.columns:
             from app.services.indicator_service import _fix_trading_date
 
             original_dates = df["datetime"].copy()
-            df["datetime"] = df["datetime"].apply(
-                lambda x: _fix_trading_date(x) if pd.notna(x) else x
-            )
+            df["datetime"] = df["datetime"].apply(lambda x: _fix_trading_date(x) if pd.notna(x) else x)
             # 记录修正的日期
             for i in range(len(df)):
                 orig = original_dates.iloc[i]
@@ -203,24 +193,14 @@ class DataProcessor:
 
             before_dedup = len(df)
             # 按 stock_code + period + 日期分组，保留 datetime 最大的记录（时间较晚的）
-            df = (
-                df.sort_values("datetime")
-                .groupby(["stock_code", "period", "_date"], as_index=False)
-                .last()
-            )
+            df = df.sort_values("datetime").groupby(["stock_code", "period", "_date"], as_index=False).last()
             after_dedup = len(df)
 
             # 删除临时列
             df = df.drop(columns=["_date"])
 
             if before_dedup != after_dedup:
-                print(
-                    "[DataProcessor] 按日期去重: 从 "
-                    + str(before_dedup)
-                    + " 条减少到 "
-                    + str(after_dedup)
-                    + " 条"
-                )
+                print("[DataProcessor] 按日期去重: 从 " + str(before_dedup) + " 条减少到 " + str(after_dedup) + " 条")
 
         df = df.sort_values("datetime").reset_index(drop=True)
         return df
@@ -283,12 +263,8 @@ class DataProcessor:
             .dropna()
         )
 
-        resampled["stock_code"] = (
-            df["stock_code"].iloc[0] if "stock_code" in df.columns else None
-        )
-        resampled["stock_name"] = (
-            df["stock_name"].iloc[0] if "stock_name" in df.columns else None
-        )
+        resampled["stock_code"] = df["stock_code"].iloc[0] if "stock_code" in df.columns else None
+        resampled["stock_name"] = df["stock_name"].iloc[0] if "stock_name" in df.columns else None
         resampled["period"] = target_period
         resampled["source"] = "resampled"
 
@@ -321,7 +297,4 @@ class DataProcessor:
         关键逻辑:
             直接抛出RuntimeError，禁止使用模拟数据，强制使用真实数据源
         """
-        raise RuntimeError(
-            "模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。"
-            "股票代码: " + stock_code
-        )
+        raise RuntimeError("模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。" "股票代码: " + stock_code)

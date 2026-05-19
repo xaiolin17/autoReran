@@ -6,12 +6,8 @@ from app.core.logger import logger
 
 class TechnicalIndicators:
     @staticmethod
-    def calculate_kdj(
-        df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3
-    ) -> pd.DataFrame:
-        logger.debug(
-            f"开始计算KDJ指标: 数据条数={len(df)}, 参数n={n}, m1={m1}, m2={m2}"
-        )
+    def calculate_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.DataFrame:
+        logger.debug(f"开始计算KDJ指标: 数据条数={len(df)}, 参数n={n}, m1={m1}, m2={m2}")
 
         if df.empty:
             logger.warning("输入数据为空，返回带有NaN值的KDJ列")
@@ -36,9 +32,7 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def calculate_macd(
-        df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9
-    ) -> pd.DataFrame:
+    def calculate_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
         if df.empty:
             df["macd"] = np.nan
             df["macd_signal"] = np.nan
@@ -74,9 +68,7 @@ class TechnicalIndicators:
         return df
 
     @staticmethod
-    def calculate_bollinger_bands(
-        df: pd.DataFrame, period: int = 20, std_dev: float = 2
-    ) -> pd.DataFrame:
+    def calculate_bollinger_bands(df: pd.DataFrame, period: int = 20, std_dev: float = 2) -> pd.DataFrame:
         if df.empty:
             df["bb_middle"] = np.nan
             df["bb_upper"] = np.nan

@@ -176,11 +176,7 @@ def get_marks(stock_code: str, period: str = "1d", db: Session = Depends(get_db)
     for mark in marks:
         result.append(
             {
-                "datetime": (
-                    mark.datetime.isoformat()
-                    if hasattr(mark.datetime, "isoformat")
-                    else str(mark.datetime)
-                ),
+                "datetime": (mark.datetime.isoformat() if hasattr(mark.datetime, "isoformat") else str(mark.datetime)),
                 "label": mark.label,
             }
         )
@@ -298,9 +294,7 @@ def fetch_and_save_stock_data(
         调用 StockService.fetch_and_save_stock_data() 从外部数据源（TickFlow）获取数据并保存到数据库
     """
     service = StockService(db)
-    saved_data = service.fetch_and_save_stock_data(
-        stock_code, period, start_date, end_date
-    )
+    saved_data = service.fetch_and_save_stock_data(stock_code, period, start_date, end_date)
     return {
         "message": "Successfully saved " + str(len(saved_data)) + " records",
         "count": len(saved_data),
@@ -538,11 +532,7 @@ def deduplicate_stock_data(
     service = StockService(db)
     deleted_count = service.deduplicate_stock_data(stock_code, period)
     return {
-        "message": (
-            "已清理 " + str(deleted_count) + " 条重复数据"
-            if deleted_count > 0
-            else "没有重复数据"
-        ),
+        "message": ("已清理 " + str(deleted_count) + " 条重复数据" if deleted_count > 0 else "没有重复数据"),
         "stock_code": stock_code,
         "period": period,
         "deleted_count": deleted_count,
@@ -723,14 +713,10 @@ def _run_fetch_task(
         _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
         logger.debug("开始获取并保存股票数据")
-        saved_data = service.fetch_and_save_stock_data(
-            stock_code, period, start_date=start_date, end_date=end_date
-        )
+        saved_data = service.fetch_and_save_stock_data(stock_code, period, start_date=start_date, end_date=end_date)
 
         if saved_data:
-            logger.info(
-                "数据下载完成，开始计算技术指标: " + str(len(saved_data)) + " 条数据"
-            )
+            logger.info("数据下载完成，开始计算技术指标: " + str(len(saved_data)) + " 条数据")
             _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")
             indicator_service.calculate_and_save_indicators(stock_code, period)
             logger.info("技术指标计算完成")
@@ -784,9 +770,7 @@ def _run_refresh_task(stock_code: str, period: str, start_date: Optional[str] = 
 
         _send_progress_ws(stock_code, "downloading", 10, "正在从 TickFlow 获取数据...")
 
-        saved_data = service.fetch_and_save_stock_data(
-            stock_code, period, start_date=start_date, incremental=True
-        )
+        saved_data = service.fetch_and_save_stock_data(stock_code, period, start_date=start_date, incremental=True)
 
         if saved_data:
             _send_progress_ws(stock_code, "calculating", 70, "正在计算技术指标...")

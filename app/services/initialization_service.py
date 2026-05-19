@@ -79,9 +79,7 @@ def _run_initialization_task():
             one_month_ago = today - timedelta(days=30)
             start_date_str = one_month_ago.strftime("%Y%m%d")
             end_date_str = today.strftime("%Y%m%d")
-            _send_progress_ws(
-                stock_code, "downloading", 10, f"Downloading: {one_month_ago} ~ {today}"
-            )
+            _send_progress_ws(stock_code, "downloading", 10, f"Downloading: {one_month_ago} ~ {today}")
         else:
             latest_date_only = latest_date.date()
             if latest_date_only >= today:
@@ -109,9 +107,7 @@ def _run_initialization_task():
         # 判断是否需要获取今天的数据：如果是当天单独获取，使用实时接口
         today_str = today.strftime("%Y%m%d")
         if start_date_str == end_date_str == today_str:
-            _send_progress_ws(
-                stock_code, "downloading", 20, f"获取今日实时数据: {today_str}"
-            )
+            _send_progress_ws(stock_code, "downloading", 20, f"获取今日实时数据: {today_str}")
             saved_data = service.fetch_and_save_stock_data(
                 stock_code,
                 period,
@@ -143,9 +139,7 @@ def _run_initialization_task():
                 True,
             )
         else:
-            _send_progress_ws(
-                stock_code, "completed", 100, "未获取到新数据 (非交易日)", False
-            )
+            _send_progress_ws(stock_code, "completed", 100, "未获取到新数据 (非交易日)", False)
 
     except Exception as e:
         logger.error(f"初始化任务错误: {e}", exc_info=True)
@@ -189,9 +183,7 @@ class InitializationService:
                 success = stock_service.initialize_default_data(default_stock_code)
 
                 if success:
-                    indicator_service.calculate_and_save_indicators(
-                        default_stock_code, "1d"
-                    )
+                    indicator_service.calculate_and_save_indicators(default_stock_code, "1d")
                 else:
                     logger.warning("默认数据初始化失败 (网络问题)")
 

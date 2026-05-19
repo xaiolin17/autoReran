@@ -133,14 +133,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
             # 处理客户端消息
             if data.get("type") == "ping":
-                await ws_manager.send_personal_message(
-                    {"type": "pong", "timestamp": data.get("timestamp")}, websocket
-                )
+                await ws_manager.send_personal_message({"type": "pong", "timestamp": data.get("timestamp")}, websocket)
             elif data.get("type") == "subscribe":
                 channel = data.get("channel", "realtime")
-                await ws_manager.send_personal_message(
-                    {"type": "subscribed", "channel": channel}, websocket
-                )
+                await ws_manager.send_personal_message({"type": "subscribed", "channel": channel}, websocket)
             elif data.get("type") == "refresh":
                 # 广播数据刷新通知
                 await ws_manager.broadcast(

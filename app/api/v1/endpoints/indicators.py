@@ -113,9 +113,7 @@ def get_stock_data_with_indicators(
         limit = None
         logger.debug("有日期范围参数，取消limit限制")
 
-    result = service.get_stock_data_with_indicators(
-        stock_code, period, start_date, end_date, limit
-    )
+    result = service.get_stock_data_with_indicators(stock_code, period, start_date, end_date, limit)
     # result: {"data": [...], "missing_ranges": [...]}
 
     # 添加股票代码和名称信息到响应
@@ -200,9 +198,7 @@ def get_recent_stock_data(
         data.append(
             {
                 "datetime": (
-                    stock.datetime.isoformat()
-                    if hasattr(stock.datetime, "isoformat")
-                    else str(stock.datetime)
+                    stock.datetime.isoformat() if hasattr(stock.datetime, "isoformat") else str(stock.datetime)
                 ),
                 "open_price": stock.open_price,
                 "high_price": stock.high_price,
@@ -335,9 +331,7 @@ def get_paged_stock_data(
         data.append(
             {
                 "datetime": (
-                    stock.datetime.isoformat()
-                    if hasattr(stock.datetime, "isoformat")
-                    else str(stock.datetime)
+                    stock.datetime.isoformat() if hasattr(stock.datetime, "isoformat") else str(stock.datetime)
                 ),
                 "open_price": stock.open_price,
                 "high_price": stock.high_price,
@@ -563,9 +557,7 @@ def _download_task(stock_code: str, period: str, task_id: str, incremental: bool
             "message": "正在从东方财富获取数据...",
         }
 
-        stock_service.fetch_and_save_stock_data(
-            stock_code, period, start_date, end_date
-        )
+        stock_service.fetch_and_save_stock_data(stock_code, period, start_date, end_date)
 
         task_status[task_id] = {
             "status": "downloading",
@@ -687,13 +679,7 @@ def _download_missing_ranges_task(
     missing_ranges = _merge_missing_ranges(missing_ranges)
     merged_count = len(missing_ranges)
     if merged_count < original_count:
-        logger.info(
-            "合并缺失范围: "
-            + str(original_count)
-            + " 个 -> "
-            + str(merged_count)
-            + " 个"
-        )
+        logger.info("合并缺失范围: " + str(original_count) + " 个 -> " + str(merged_count) + " 个")
 
     logger.info(
         "开始执行后台下载任务: task_id="
@@ -745,12 +731,7 @@ def _download_missing_ranges_task(
             # 发送WebSocket通知
             def _send_websocket_notification():
                 async def _broadcast():
-                    logger.debug(
-                        "发送WebSocket进度通知: task_id="
-                        + task_id
-                        + ", progress="
-                        + str(progress)
-                    )
+                    logger.debug("发送WebSocket进度通知: task_id=" + task_id + ", progress=" + str(progress))
                     await manager.broadcast(
                         {
                             "type": "download_progress",
@@ -821,17 +802,11 @@ def _download_missing_ranges_task(
                     stock_service.fetch_and_save_stock_data(
                         stock_code=stock_code,
                         period=period,
-                        start_date=datetime.strptime(
-                            missing_range["start"], "%Y-%m-%d"
-                        ).strftime("%Y%m%d"),
-                        end_date=datetime.strptime(
-                            missing_range["end"], "%Y-%m-%d"
-                        ).strftime("%Y%m%d"),
+                        start_date=datetime.strptime(missing_range["start"], "%Y-%m-%d").strftime("%Y%m%d"),
+                        end_date=datetime.strptime(missing_range["end"], "%Y-%m-%d").strftime("%Y%m%d"),
                     )
 
-                logger.info(
-                    "数据范围 " + str(i + 1) + "/" + str(total_ranges) + " 下载完成"
-                )
+                logger.info("数据范围 " + str(i + 1) + "/" + str(total_ranges) + " 下载完成")
 
                 # 计算新下载数据的技术指标
                 logger.debug(
@@ -858,13 +833,7 @@ def _download_missing_ranges_task(
                 )
                 continue
 
-        logger.info(
-            "所有数据范围下载完成: task_id="
-            + task_id
-            + ", 总计 "
-            + str(total_ranges)
-            + " 个范围"
-        )
+        logger.info("所有数据范围下载完成: task_id=" + task_id + ", 总计 " + str(total_ranges) + " 个范围")
         task_status[task_id] = {
             "status": "completed",
             "progress": 100,
@@ -990,15 +959,7 @@ def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool)
             task_status[task_id] = {
                 "status": "downloading",
                 "progress": progress,
-                "message": (
-                    "正在下载"
-                    + period
-                    + "周期数据 ("
-                    + str(i + 1)
-                    + "/"
-                    + str(total_periods)
-                    + ")..."
-                ),
+                "message": ("正在下载" + period + "周期数据 (" + str(i + 1) + "/" + str(total_periods) + ")..."),
             }
 
             # 下载数据
@@ -1010,9 +971,7 @@ def _download_all_periods_task(stock_code: str, task_id: str, incremental: bool)
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
 
             try:
-                stock_service.fetch_and_save_stock_data(
-                    stock_code, period, start_date, end_date
-                )
+                stock_service.fetch_and_save_stock_data(stock_code, period, start_date, end_date)
 
                 # 计算技术指标
                 indicator_service.get_stock_data_with_indicators(stock_code, period)

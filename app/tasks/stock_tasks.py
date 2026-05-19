@@ -11,9 +11,7 @@ from app.services.ml_service import MLService
 from app.services.stock_service import StockService
 
 
-def update_task_status(
-    task_id, task_type, status, progress=0, result=None, error_message=None
-):
+def update_task_status(task_id, task_type, status, progress=0, result=None, error_message=None):
     db = SessionLocal()
     try:
         task = db.query(TaskStatus).filter(TaskStatus.task_id == task_id).first()
@@ -62,9 +60,7 @@ def fetch_stock_data_task(
 
         update_task_status(task_id, task_type, "processing", 30)
 
-        saved_stocks = stock_service.fetch_and_save_stock_data(
-            stock_code, period, start_date, end_date
-        )
+        saved_stocks = stock_service.fetch_and_save_stock_data(stock_code, period, start_date, end_date)
 
         update_task_status(task_id, task_type, "processing", 80)
 
@@ -159,9 +155,7 @@ def run_backtest_task(
 ):
     task_id = self.request.id
     task_type = "run_backtest"
-    logger.info(
-        f"开始运行回测，股票: {stock_code}，策略: {strategy_name}，任务ID: {task_id}"
-    )
+    logger.info(f"开始运行回测，股票: {stock_code}，策略: {strategy_name}，任务ID: {task_id}")
 
     update_task_status(task_id, task_type, "processing", 10)
 

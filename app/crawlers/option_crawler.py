@@ -254,9 +254,7 @@ class OptionCrawler:
             # 通常期权代码格式类似: 10006265C003800000
             if len(option_code) >= 8:
                 # 尝试解析行权价
-                price_str = (
-                    option_code[-5:] if len(option_code) >= 13 else option_code[-4:]
-                )
+                price_str = option_code[-5:] if len(option_code) >= 13 else option_code[-4:]
                 return float(price_str) / 1000.0
         except Exception:
             pass
