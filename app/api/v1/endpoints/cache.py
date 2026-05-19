@@ -1,5 +1,7 @@
 from fastapi import APIRouter
-from app.core.cache import get_cache_stats, invalidate_all_cache, invalidate_cache
+
+from app.core.cache import (get_cache_stats, invalidate_all_cache,
+                            invalidate_cache)
 from app.core.logger import logger
 
 router = APIRouter()

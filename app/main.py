@@ -1,13 +1,17 @@
 import os
-from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from app.core.config import settings
-from app.core.database import engine, Base, SessionLocal
-from app.core.websocket_manager import manager as ws_manager
+from starlette.middleware.base import BaseHTTPMiddleware
+
 from app.api.v1 import api_router
+from app.core.config import settings
+from app.core.database import Base, SessionLocal, engine
+from app.core.logger import logger
+from app.core.websocket_manager import manager as ws_manager
 from app.services.initialization_service import InitializationService
 
 # 获取项目根目录的绝对路径
@@ -20,8 +24,6 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 
-from app.core.logger import logger
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup 事件
@@ -31,7 +33,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"创建表结构时出错: {e}")
         logger.info("提示: 如果已存在旧数据库，可能需要删除 stock_data.db")
-    
+
     # 初始化默认数据 (容错处理)
     try:
         db = SessionLocal()
@@ -44,7 +46,7 @@ async def lifespan(app: FastAPI):
             db.close()
     except Exception as e:
         logger.error(f"初始化服务异常: {e}", exc_info=True)
-    
+
     yield
     # Shutdown 事件
     logger.info("AReran 正在关闭...")
@@ -54,19 +56,19 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # 注册 API 路由
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # 配置静态文件
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+app.mount(
+    "/static",
+    StaticFiles(directory=str(STATIC_DIR), html=True),
+    name="static",
+)
 
-# 添加缓存控制，开发环境下禁用缓存
-from fastapi import Request
-from fastapi.responses import Response
-from starlette.middleware.base import BaseHTTPMiddleware
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -76,6 +78,7 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
         return response
+
 
 app.add_middleware(CacheControlMiddleware)
 
@@ -131,23 +134,25 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             # 处理客户端消息
             if data.get("type") == "ping":
                 await ws_manager.send_personal_message(
-                    {"type": "pong", "timestamp": data.get("timestamp")},
-                    websocket
+                    {"type": "pong", "timestamp": data.get("timestamp")}, websocket
                 )
             elif data.get("type") == "subscribe":
                 channel = data.get("channel", "realtime")
                 await ws_manager.send_personal_message(
-                    {"type": "subscribed", "channel": channel},
-                    websocket
+                    {"type": "subscribed", "channel": channel}, websocket
                 )
             elif data.get("type") == "refresh":
                 # 广播数据刷新通知
                 await ws_manager.broadcast(
-                    {"type": "refresh_needed", "reason": "manual_refresh", "sender": client_id},
-                    channel="realtime"
+                    {
+                        "type": "refresh_needed",
+                        "reason": "manual_refresh",
+                        "sender": client_id,
+                    },
+                    channel="realtime",
                 )
 
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, channel="realtime")
-    except Exception as e:
+    except Exception:
         ws_manager.disconnect(websocket, channel="realtime")

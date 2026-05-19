@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class TradeMarkBase(BaseModel):
@@ -20,6 +21,6 @@ class TradeMarkCreate(TradeMarkBase):
 class TradeMark(TradeMarkBase):
     id: int
     created_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True

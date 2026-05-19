@@ -1,15 +1,4 @@
-from app.api.v1.endpoints import stocks
-from app.api.v1.endpoints import indicators
-from app.api.v1.endpoints import ml
-from app.api.v1.endpoints import backtest
-from app.api.v1.endpoints import scheduler
-from app.api.v1.endpoints import options
+from app.api.v1.endpoints import (backtest, indicators, ml, options, scheduler,
+                                  stocks)
 
-__all__ = [
-    "stocks",
-    "indicators",
-    "ml",
-    "backtest",
-    "scheduler",
-    "options"
-]
+__all__ = ["stocks", "indicators", "ml", "backtest", "scheduler", "options"]

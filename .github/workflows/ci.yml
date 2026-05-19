@@ -20,11 +20,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 black isort
     - name: Run flake8
-      run: flake8 app/
+      run: flake8 app/ --max-line-length=120 --extend-ignore=E203,W503
     - name: Check code formatting with black
-      run: black --check app/
+      run: black --check app/ --line-length=120
     - name: Check import ordering with isort
-      run: isort --check-only app/
+      run: isort --check-only app/ --profile=black
 
   test:
     runs-on: ubuntu-latest

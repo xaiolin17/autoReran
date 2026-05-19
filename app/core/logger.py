@@ -1,8 +1,7 @@
+import inspect
 import logging
 import sys
-import inspect
-import os
-from typing import Optional
+
 from app.core.config import settings
 
 
@@ -20,7 +19,7 @@ class CallerFilter(logging.Filter):
                 filename = frame.f_code.co_filename
                 func_name = frame.f_code.co_name
                 # 跳过 logging 模块和 logger.py 自身的帧
-                if 'logging' not in filename and 'logger.py' not in filename:
+                if "logging" not in filename and "logger.py" not in filename:
                     caller_frame = frame
                     break
                 frame = frame.f_back
@@ -29,8 +28,8 @@ class CallerFilter(logging.Filter):
                 func_name = caller_frame.f_code.co_name
 
                 # 如果是类方法，尝试获取类名，只输出 类名.函数名
-                if 'self' in caller_frame.f_locals:
-                    class_name = caller_frame.f_locals['self'].__class__.__name__
+                if "self" in caller_frame.f_locals:
+                    class_name = caller_frame.f_locals["self"].__class__.__name__
                     record.caller_info = f"{class_name}.{func_name}"
                 else:
                     record.caller_info = func_name
@@ -62,7 +61,7 @@ def setup_logger(name: str = "stock_analysis") -> logging.Logger:
     # 使用 caller_info 替代固定的 name，添加进程号(process)d和线程号(thread)d
     formatter = logging.Formatter(
         "%(asctime)s [PID:%(process)d TID:%(thread)d] %(caller_info)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # 添加调用者过滤器

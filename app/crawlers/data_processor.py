@@ -1,7 +1,6 @@
+from typing import List
+
 import pandas as pd
-from typing import List, Dict, Optional
-from datetime import datetime, timedelta
-import numpy as np
 
 
 class DataProcessor:
@@ -40,12 +39,14 @@ class DataProcessor:
         """
         if not data_list:
             return pd.DataFrame()
-        
+
         merged = pd.concat(data_list, ignore_index=True)
         return merged
-    
+
     @staticmethod
-    def average_data(data_list: List[pd.DataFrame], method: str = "mean") -> pd.DataFrame:
+    def average_data(
+        data_list: List[pd.DataFrame], method: str = "mean"
+    ) -> pd.DataFrame:
         """
         对多个DataFrame按分组进行聚合计算
 
@@ -70,24 +71,35 @@ class DataProcessor:
         """
         if not data_list:
             return pd.DataFrame()
-        
+
         if len(data_list) == 1:
             return data_list[0]
-        
+
         merged = pd.concat(data_list, ignore_index=True)
-        
+
         if merged.empty:
             return pd.DataFrame()
-        
-        numeric_cols = ['open_price', 'high_price', 'low_price', 'close_price', 'volume', 'amount']
-        group_cols = ['datetime', 'stock_code', 'period']
-        
-        available_numeric = [col for col in numeric_cols if col in merged.columns]
-        available_group = [col for col in group_cols if col in merged.columns]
-        
+
+        numeric_cols = [
+            "open_price",
+            "high_price",
+            "low_price",
+            "close_price",
+            "volume",
+            "amount",
+        ]
+        group_cols = ["datetime", "stock_code", "period"]
+
+        available_numeric = [
+            col for col in numeric_cols if col in merged.columns
+        ]
+        available_group = [
+            col for col in group_cols if col in merged.columns
+        ]
+
         if not available_group or not available_numeric:
             return merged
-        
+
         agg_dict = {}
         for col in available_numeric:
             if method == "mean":
@@ -96,15 +108,17 @@ class DataProcessor:
                 agg_dict[col] = "median"
             else:
                 agg_dict[col] = "mean"
-        
-        if 'stock_name' in merged.columns:
-            agg_dict['stock_name'] = 'first'
-        if 'source' in merged.columns:
-            agg_dict['source'] = lambda x: ','.join(set(x))
-        
-        result = merged.groupby(available_group, as_index=False).agg(agg_dict)
+
+        if "stock_name" in merged.columns:
+            agg_dict["stock_name"] = "first"
+        if "source" in merged.columns:
+            agg_dict["source"] = lambda x: ",".join(set(x))
+
+        result = merged.groupby(
+            available_group, as_index=False
+        ).agg(agg_dict)
         return result
-    
+
     @staticmethod
     def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -130,66 +144,107 @@ class DataProcessor:
         if df.empty:
             return df
 
-        required_cols = ['open_price', 'high_price', 'low_price', 'close_price', 'volume']
-        available_cols = [col for col in required_cols if col in df.columns]
+        required_cols = [
+            "open_price",
+            "high_price",
+            "low_price",
+            "close_price",
+            "volume",
+        ]
+        available_cols = [
+            col for col in required_cols if col in df.columns
+        ]
 
         if len(available_cols) < len(required_cols):
             df = df.dropna(subset=available_cols)
         else:
             df = df.dropna(subset=required_cols)
 
-        df = df[df['volume'] >= 0]
-        df = df[df['high_price'] >= df['low_price']]
-        df = df[df['high_price'] >= df['open_price']]
-        df = df[df['high_price'] >= df['close_price']]
-        df = df[df['low_price'] <= df['open_price']]
-        df = df[df['low_price'] <= df['close_price']]
+        df = df[df["volume"] >= 0]
+        df = df[df["high_price"] >= df["low_price"]]
+        df = df[df["high_price"] >= df["open_price"]]
+        df = df[df["high_price"] >= df["close_price"]]
+        df = df[df["low_price"] <= df["open_price"]]
+        df = df[df["low_price"] <= df["close_price"]]
 
         # 去除重复数据：按 stock_code + period + datetime 去重，保留第一条
-        dup_cols = ['stock_code', 'period', 'datetime']
-        dup_cols_available = [col for col in dup_cols if col in df.columns]
+        dup_cols = ["stock_code", "period", "datetime"]
+        dup_cols_available = [
+            col for col in dup_cols if col in df.columns
+        ]
         if len(dup_cols_available) >= 2:
             before_dedup = len(df)
-            df = df.drop_duplicates(subset=dup_cols_available, keep='first')
+            df = df.drop_duplicates(
+                subset=dup_cols_available, keep="first"
+            )
             after_dedup = len(df)
             if before_dedup != after_dedup:
-                print(f"[DataProcessor] 去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
+                print(
+                    "[DataProcessor] 去重: 从 "
+                    + str(before_dedup)
+                    + " 条减少到 "
+                    + str(after_dedup) + " 条"
+                )
 
         # 修正日期：将所有非交易日的数据日期修正为向前最近的交易日
-        if 'datetime' in df.columns:
+        if "datetime" in df.columns:
             from app.services.indicator_service import _fix_trading_date
-            original_dates = df['datetime'].copy()
-            df['datetime'] = df['datetime'].apply(lambda x: _fix_trading_date(x) if pd.notna(x) else x)
+
+            original_dates = df["datetime"].copy()
+            df["datetime"] = df["datetime"].apply(
+                lambda x: _fix_trading_date(x) if pd.notna(x) else x
+            )
             # 记录修正的日期
             for i in range(len(df)):
                 orig = original_dates.iloc[i]
-                fixed = df['datetime'].iloc[i]
-                if pd.notna(orig) and pd.notna(fixed) and orig.date() != fixed.date():
-                    print(f"[DataProcessor] 日期修正: {orig.date()} -> {fixed.date()} (非交易日修正为最近交易日)")
+                fixed = df["datetime"].iloc[i]
+                if (
+                    pd.notna(orig)
+                    and pd.notna(fixed)
+                    and orig.date() != fixed.date()
+                ):
+                    print(
+                        "[DataProcessor] 日期修正: "
+                        + str(orig.date())
+                        + " -> "
+                        + str(fixed.date())
+                        + " (非交易日修正为最近交易日)"
+                    )
 
         # 按日期去重：同一天保留时间较晚的数据（16:00:00 优先于 00:00:00）
-        if 'datetime' in df.columns and not df.empty:
+        if "datetime" in df.columns and not df.empty:
             # 提取日期部分用于分组
-            df['_date'] = df['datetime'].dt.date
+            df["_date"] = df["datetime"].dt.date
 
             before_dedup = len(df)
             # 按 stock_code + period + 日期分组，保留 datetime 最大的记录（时间较晚的）
-            df = df.sort_values('datetime').groupby(
-                ['stock_code', 'period', '_date'], as_index=False
-            ).last()
+            df = (
+                df.sort_values("datetime")
+                .groupby(
+                    ["stock_code", "period", "_date"], as_index=False
+                )
+                .last()
+            )
             after_dedup = len(df)
 
             # 删除临时列
-            df = df.drop(columns=['_date'])
+            df = df.drop(columns=["_date"])
 
             if before_dedup != after_dedup:
-                print(f"[DataProcessor] 按日期去重: 从 {before_dedup} 条减少到 {after_dedup} 条")
+                print(
+                    "[DataProcessor] 按日期去重: 从 "
+                    + str(before_dedup)
+                    + " 条减少到 "
+                    + str(after_dedup) + " 条"
+                )
 
-        df = df.sort_values('datetime').reset_index(drop=True)
+        df = df.sort_values("datetime").reset_index(drop=True)
         return df
-    
+
     @staticmethod
-    def resample_data(df: pd.DataFrame, target_period: str) -> pd.DataFrame:
+    def resample_data(
+        df: pd.DataFrame, target_period: str
+    ) -> pd.DataFrame:
         """
         将数据重采样到指定周期
 
@@ -215,9 +270,9 @@ class DataProcessor:
         """
         if df.empty:
             return df
-        
-        df = df.set_index('datetime').sort_index()
-        
+
+        df = df.set_index("datetime").sort_index()
+
         period_map = {
             "1m": "1T",
             "5m": "5T",
@@ -226,31 +281,49 @@ class DataProcessor:
             "1h": "1H",
             "1d": "1D",
             "1w": "1W",
-            "1M": "1M"
+            "1M": "1M",
         }
-        
+
         freq = period_map.get(target_period, "1D")
-        
-        resampled = df.resample(freq).agg({
-            'open_price': 'first',
-            'high_price': 'max',
-            'low_price': 'min',
-            'close_price': 'last',
-            'volume': 'sum',
-            'amount': 'sum'
-        }).dropna()
-        
-        resampled['stock_code'] = df['stock_code'].iloc[0] if 'stock_code' in df.columns else None
-        resampled['stock_name'] = df['stock_name'].iloc[0] if 'stock_name' in df.columns else None
-        resampled['period'] = target_period
-        resampled['source'] = 'resampled'
-        
+
+        resampled = (
+            df.resample(freq)
+            .agg(
+                {
+                    "open_price": "first",
+                    "high_price": "max",
+                    "low_price": "min",
+                    "close_price": "last",
+                    "volume": "sum",
+                    "amount": "sum",
+                }
+            )
+            .dropna()
+        )
+
+        resampled["stock_code"] = (
+            df["stock_code"].iloc[0]
+            if "stock_code" in df.columns
+            else None
+        )
+        resampled["stock_name"] = (
+            df["stock_name"].iloc[0]
+            if "stock_name" in df.columns
+            else None
+        )
+        resampled["period"] = target_period
+        resampled["source"] = "resampled"
+
         resampled = resampled.reset_index()
         return resampled
-    
+
     @staticmethod
-    def generate_sample_data(stock_code: str, period: str = "1d",
-                            days: int = 365, base_price: float = 100.0) -> pd.DataFrame:
+    def generate_sample_data(
+        stock_code: str,
+        period: str = "1d",
+        days: int = 365,
+        base_price: float = 100.0,
+    ) -> pd.DataFrame:
         """
         生成模拟数据（已禁用）
 
@@ -271,6 +344,6 @@ class DataProcessor:
             直接抛出RuntimeError，禁止使用模拟数据，强制使用真实数据源
         """
         raise RuntimeError(
-            f"模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。"
-            f"股票代码: {stock_code}"
+            "模拟数据已禁用，请确保 TickFlow 可用或从数据库加载数据。"
+            "股票代码: " + stock_code
         )

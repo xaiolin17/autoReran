@@ -1,67 +1,64 @@
-from fastapi import Request, Response
 import time
+
+from fastapi import Request, Response
+
 from app.core.logger import logger
 
 # 尝试导入 Prometheus，如果不可用则提供空实现
 try:
-    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge,
+                                   Histogram, generate_latest)
+
     PROMETHEUS_AVAILABLE = True
-    
+
     # 请求计数
     REQUEST_COUNT = Counter(
-        'http_requests_total',
-        'Total number of HTTP requests',
-        ['method', 'endpoint', 'status_code']
+        "http_requests_total",
+        "Total number of HTTP requests",
+        ["method", "endpoint", "status_code"],
     )
-    
+
     # 请求耗时
     REQUEST_DURATION = Histogram(
-        'http_request_duration_seconds',
-        'HTTP request duration in seconds',
-        ['method', 'endpoint']
+        "http_request_duration_seconds",
+        "HTTP request duration in seconds",
+        ["method", "endpoint"],
     )
-    
+
     # 活跃请求数
     ACTIVE_REQUESTS = Gauge(
-        'http_active_requests',
-        'Number of active HTTP requests',
-        ['method', 'endpoint']
+        "http_active_requests", "Number of active HTTP requests", ["method", "endpoint"]
     )
-    
+
     # 股票数据获取次数
     STOCK_DATA_FETCHES = Counter(
-        'stock_data_fetches_total',
-        'Total number of stock data fetches',
-        ['stock_code', 'source']
+        "stock_data_fetches_total",
+        "Total number of stock data fetches",
+        ["stock_code", "source"],
     )
-    
+
     # 模型训练次数
     MODEL_TRAINS = Counter(
-        'model_trains_total',
-        'Total number of model trainings',
-        ['model_type', 'stock_code']
+        "model_trains_total",
+        "Total number of model trainings",
+        ["model_type", "stock_code"],
     )
-    
+
     # 回测执行次数
     BACKTEST_RUNS = Counter(
-        'backtest_runs_total',
-        'Total number of backtest runs',
-        ['strategy_name', 'stock_code']
+        "backtest_runs_total",
+        "Total number of backtest runs",
+        ["strategy_name", "stock_code"],
     )
-    
+
     # Celery 任务状态
     CELERY_TASKS = Counter(
-        'celery_tasks_total',
-        'Total number of Celery tasks',
-        ['task_type', 'status']
+        "celery_tasks_total", "Total number of Celery tasks", ["task_type", "status"]
     )
-    
+
     # 数据库连接数
-    DB_CONNECTIONS = Gauge(
-        'db_connections',
-        'Number of database connections'
-    )
-    
+    DB_CONNECTIONS = Gauge("db_connections", "Number of database connections")
+
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     logger.warning("Prometheus client not available, metrics will be disabled")
@@ -70,35 +67,30 @@ except ImportError:
 async def metrics_middleware(request: Request, call_next):
     if not PROMETHEUS_AVAILABLE:
         return await call_next(request)
-    
+
     method = request.method
     endpoint = request.url.path
-    
+
     # 跳过 metrics 端点自身的记录
-    if endpoint == '/metrics':
+    if endpoint == "/metrics":
         return await call_next(request)
-    
+
     ACTIVE_REQUESTS.labels(method=method, endpoint=endpoint).inc()
     start_time = time.time()
-    
+
     try:
         response = await call_next(request)
         status_code = str(response.status_code)
-        
+
         # 记录请求计数
         REQUEST_COUNT.labels(
-            method=method,
-            endpoint=endpoint,
-            status_code=status_code
+            method=method, endpoint=endpoint, status_code=status_code
         ).inc()
-        
+
         # 记录请求耗时
         duration = time.time() - start_time
-        REQUEST_DURATION.labels(
-            method=method,
-            endpoint=endpoint
-        ).observe(duration)
-        
+        REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
+
         return response
     finally:
         ACTIVE_REQUESTS.labels(method=method, endpoint=endpoint).dec()
@@ -108,13 +100,10 @@ def get_metrics():
     if not PROMETHEUS_AVAILABLE:
         return Response(
             content={"message": "Prometheus metrics not available"},
-            media_type="application/json"
+            media_type="application/json",
         )
-    
-    return Response(
-        content=generate_latest(),
-        media_type=CONTENT_TYPE_LATEST
-    )
+
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 def record_stock_data_fetch(stock_code: str, source: str):

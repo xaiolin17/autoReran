@@ -1,17 +1,20 @@
 import os
-import pandas as pd
-import numpy as np
-import time
 import threading
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+import time
 from collections import deque
-from app.crawlers.base import BaseCrawler
-from app.core.logger import logger
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+
 from app.core.config import settings
+from app.core.logger import logger
+from app.crawlers.base import BaseCrawler
 
 try:
     from tickflow import TickFlow
+
     TICKFLOW_AVAILABLE = True
 except ImportError:
     TICKFLOW_AVAILABLE = False
@@ -169,7 +172,9 @@ class TickFlowCrawler(BaseCrawler):
             TickFlow: TickFlow SDK实例，若初始化失败或API Key未设置则返回None
 
         调用关系:
-            被调用: fetch_stock_data, fetch_realtime_data, fetch_realtime_data_as_df, _load_universe_symbols, get_universe_symbols
+            被调用: fetch_stock_data, fetch_realtime_data,
+                   fetch_realtime_data_as_df, _load_universe_symbols,
+                   get_universe_symbols
             调用: settings.TICKFLOW_API_KEY, os.getenv
 
         关键逻辑:
@@ -183,7 +188,9 @@ class TickFlowCrawler(BaseCrawler):
                 if TickFlowCrawler._tf is None and self.available:
                     api_key = settings.TICKFLOW_API_KEY or os.getenv("TICKFLOW_API_KEY")
                     if not api_key:
-                        logger.error("TICKFLOW_API_KEY 未设置，请在 .env 文件中设置或配置环境变量")
+                        logger.error(
+                            "TICKFLOW_API_KEY 未设置，请在 .env 文件中设置或配置环境变量"
+                        )
                         self.available = False
                         return None
                     TickFlowCrawler._tf = TickFlow(api_key=api_key)
@@ -219,10 +226,14 @@ class TickFlowCrawler(BaseCrawler):
                 return result
             except Exception as e:
                 last_exception = e
-                wait_time = self.retry_delay * (2 ** attempt)
-                logger.warning(f"第 {attempt + 1}/{self.max_retries} 次尝试失败: {str(e)}。{wait_time}秒后重试...")
+                wait_time = self.retry_delay * (2**attempt)
+                logger.warning(
+                    f"第 {attempt + 1}/{self.max_retries} 次尝试失败: {str(e)}。{wait_time}秒后重试..."
+                )
                 time.sleep(wait_time)
-        logger.error(f"所有 {self.max_retries} 次尝试均失败。最后一次错误: {str(last_exception)}")
+        logger.error(
+            f"所有 {self.max_retries} 次尝试均失败。最后一次错误: {str(last_exception)}"
+        )
         return None
 
     def _normalize_stock_code(self, stock_code: str) -> str:
@@ -247,11 +258,11 @@ class TickFlowCrawler(BaseCrawler):
         """
         code = stock_code.strip().upper()
         # 去除 sh/sz/SH/SZ 前缀
-        if len(code) > 6 and code[:2] in ('SH', 'SZ', 'sh', 'sz'):
+        if len(code) > 6 and code[:2] in ("SH", "SZ", "sh", "sz"):
             return code[2:]
         # 去除 .SH/.SZ 后缀
-        if '.' in code:
-            return code.split('.')[0]
+        if "." in code:
+            return code.split(".")[0]
         return code
 
     def _extract_suffix(self, stock_code: str) -> Optional[str]:
@@ -275,9 +286,9 @@ class TickFlowCrawler(BaseCrawler):
             4. 否则返回None
         """
         code = stock_code.strip().upper()
-        if '.' in code:
-            parts = code.split('.')
-            if len(parts) == 2 and parts[1] in ('SH', 'SZ'):
+        if "." in code:
+            parts = code.split(".")
+            if len(parts) == 2 and parts[1] in ("SH", "SZ"):
                 return parts[1]
         return None
 
@@ -316,9 +327,11 @@ class TickFlowCrawler(BaseCrawler):
                 TickFlowCrawler._universe_symbols = a_shares["symbols"]
                 # 构建映射表 {short_code: full_symbol}
                 for sym in TickFlowCrawler._universe_symbols:
-                    short = sym.split('.')[0] if '.' in sym else sym
+                    short = sym.split(".")[0] if "." in sym else sym
                     TickFlowCrawler._symbol_map[short] = sym
-                logger.info(f"成功加载 {len(TickFlowCrawler._universe_symbols)} 只A股代码映射")
+                logger.info(
+                    f"成功加载 {len(TickFlowCrawler._universe_symbols)} 只A股代码映射"
+                )
             else:
                 logger.warning("无法获取 CN_Equity_A symbols")
         except Exception as e:
@@ -349,8 +362,11 @@ class TickFlowCrawler(BaseCrawler):
             return None
         try:
             from app.models.stock_data import StockCode
+
             clean_code = self._normalize_stock_code(stock_code)
-            record = self._db.query(StockCode).filter(StockCode.code == clean_code).first()
+            record = (
+                self._db.query(StockCode).filter(StockCode.code == clean_code).first()
+            )
             if record:
                 return record.name
         except Exception as e:
@@ -402,7 +418,7 @@ class TickFlowCrawler(BaseCrawler):
             return TickFlowCrawler._symbol_map[clean_code]
 
         # 根据规则推断（fallback）
-        if clean_code.startswith(('600', '601', '603', '605', '688', '689')):
+        if clean_code.startswith(("600", "601", "603", "605", "688", "689")):
             return f"{clean_code}.SH"
         else:
             return f"{clean_code}.SZ"
@@ -438,7 +454,7 @@ class TickFlowCrawler(BaseCrawler):
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        default_months: float = 1.0
+        default_months: float = 1.0,
     ) -> tuple:
         """
         统一处理 start_date 和 end_date，返回毫秒时间戳
@@ -476,7 +492,9 @@ class TickFlowCrawler(BaseCrawler):
             start_dt = start_dt.replace(hour=0, minute=0, second=0)
 
         if start_dt > end_dt:
-            logger.warning(f"无效日期范围: start_date={start_date} > end_date={end_date}")
+            logger.warning(
+                f"无效日期范围: start_date={start_date} > end_date={end_date}"
+            )
             return None, None
 
         # 转换为毫秒时间戳
@@ -489,7 +507,7 @@ class TickFlowCrawler(BaseCrawler):
         stock_code: str,
         period: str = "1d",
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         获取股票K线数据
@@ -505,7 +523,9 @@ class TickFlowCrawler(BaseCrawler):
 
         调用关系:
             被调用: StockService.fetch_and_save_stock_data 等上层服务
-            调用: _rate_limiter.acquire/get_wait_time, _get_tickflow, get_full_symbol, _get_start_end_dates, _retry_fetch, _convert_to_standard_format
+            调用: _rate_limiter.acquire/get_wait_time, _get_tickflow,
+                  get_full_symbol, _get_start_end_dates, _retry_fetch,
+                  _convert_to_standard_format
 
         关键逻辑:
             1. 检查TickFlow是否可用
@@ -516,7 +536,9 @@ class TickFlowCrawler(BaseCrawler):
             6. 将原始数据转换为项目标准格式
             7. 异常时返回空DataFrame
         """
-        logger.info(f"开始获取股票数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}")
+        logger.info(
+            f"开始获取股票数据: stock_code={stock_code}, period={period}, start_date={start_date}, end_date={end_date}"
+        )
 
         if not self.available:
             logger.warning("TickFlow 不可用")
@@ -546,9 +568,7 @@ class TickFlowCrawler(BaseCrawler):
             logger.debug(f"股票代码映射: {stock_code} -> {full_symbol}")
 
             start_ms, end_ms = self._get_start_end_dates(
-                start_date=start_date,
-                end_date=end_date,
-                default_months=1.0
+                start_date=start_date, end_date=end_date, default_months=1.0
             )
 
             if start_ms is None or end_ms is None:
@@ -564,14 +584,18 @@ class TickFlowCrawler(BaseCrawler):
                 period=period,
                 start_time=start_ms,
                 end_time=end_ms,
-                as_dataframe=True
+                as_dataframe=True,
             )
 
             if df is None or df.empty:
-                logger.warning(f"TickFlow 返回空数据: symbol={full_symbol}, period={period}")
+                logger.warning(
+                    f"TickFlow 返回空数据: symbol={full_symbol}, period={period}"
+                )
                 return pd.DataFrame()
 
-            logger.info(f"TickFlow 返回原始数据: {len(df)} 条, 列名: {list(df.columns)}")
+            logger.info(
+                f"TickFlow 返回原始数据: {len(df)} 条, 列名: {list(df.columns)}"
+            )
 
             # 转换为项目标准格式
             result = self._convert_to_standard_format(df, stock_code, period)
@@ -585,7 +609,9 @@ class TickFlowCrawler(BaseCrawler):
             logger.error(f"TickFlow获取 {stock_code} 数据失败: {str(e)}", exc_info=True)
             return pd.DataFrame()
 
-    def _convert_to_standard_format(self, df: pd.DataFrame, stock_code: str, period: str) -> pd.DataFrame:
+    def _convert_to_standard_format(
+        self, df: pd.DataFrame, stock_code: str, period: str
+    ) -> pd.DataFrame:
         """
         将TickFlow返回的数据转换为项目标准格式
 
@@ -631,40 +657,53 @@ class TickFlowCrawler(BaseCrawler):
             # TickFlow返回的列: timestamp/trade_date, open, high, low, close, volume, amount
             # 注意: timestamp 是毫秒时间戳(UTC时间)，trade_date 是北京时间日期字符串
             # 优先使用 trade_date，因为 timestamp 按 UTC 解析会导致日期比北京时间早一天
-            trade_date = row.get('trade_date')
-            ts = row.get('timestamp', row.get('trade_time', 0))
+            trade_date = row.get("trade_date")
+            ts = row.get("timestamp", row.get("trade_time", 0))
 
-            if trade_date is not None and trade_date != '':
+            if trade_date is not None and trade_date != "":
                 # 优先使用 trade_date（北京时间日期字符串，如 "2026-05-18"）
                 dt = pd.to_datetime(trade_date)
             elif isinstance(ts, (int, float)) and ts > 1e12:
                 # timestamp 是 UTC 毫秒时间戳，需要加8小时转为北京时间
-                dt = pd.to_datetime(ts, unit='ms') + timedelta(hours=8)
+                dt = pd.to_datetime(ts, unit="ms") + timedelta(hours=8)
             else:
                 dt = pd.to_datetime(ts)
 
             # 调试日志：查看原始数据中的日期字段
-            logger.debug(f"原始数据日期解析: trade_date={trade_date}, timestamp={ts}, parsed_dt={dt}, open={row.get('open')}, close={row.get('close')}")
+            logger.debug(
+                "原始数据日期解析: trade_date=" + str(trade_date)
+                + ", timestamp=" + str(ts)
+                + ", parsed_dt=" + str(dt)
+                + ", open=" + str(row.get("open"))
+                + ", close=" + str(row.get("close"))
+            )
 
             # 修正日期：将非交易日的数据日期修正为向前最近的交易日
             original_dt = dt
             dt = _fix_trading_date(dt)
             if original_dt.date() != dt.date():
-                logger.info(f"日期修正: {original_dt.date()} -> {dt.date()} (非交易日修正为最近交易日), close={row.get('close')}")
+                logger.info(
+                    "日期修正: " + str(original_dt.date())
+                    + " -> " + str(dt.date())
+                    + " (非交易日修正为最近交易日), close="
+                    + str(row.get("close"))
+                )
 
-            result.append({
-                'datetime': dt,
-                'open_price': safe_float(row.get('open')),
-                'high_price': safe_float(row.get('high')),
-                'low_price': safe_float(row.get('low')),
-                'close_price': safe_float(row.get('close')),
-                'volume': safe_float(row.get('volume')),
-                'amount': safe_float(row.get('amount')),
-                'stock_code': display_code,
-                'stock_name': row.get('name', ''),
-                'period': period,
-                'source': 'tickflow'
-            })
+            result.append(
+                {
+                    "datetime": dt,
+                    "open_price": safe_float(row.get("open")),
+                    "high_price": safe_float(row.get("high")),
+                    "low_price": safe_float(row.get("low")),
+                    "close_price": safe_float(row.get("close")),
+                    "volume": safe_float(row.get("volume")),
+                    "amount": safe_float(row.get("amount")),
+                    "stock_code": display_code,
+                    "stock_name": row.get("name", ""),
+                    "period": period,
+                    "source": "tickflow",
+                }
+            )
 
         return pd.DataFrame(result)
 
@@ -759,10 +798,13 @@ class TickFlowCrawler(BaseCrawler):
 
             # 获取当前日期作为交易日期，并修正为最近的交易日
             from app.services.indicator_service import _fix_trading_date
+
             today = datetime.now()
             fixed_today = _fix_trading_date(today)
             if today.date() != fixed_today.date():
-                logger.info(f"实时数据日期修正: {today.date()} -> {fixed_today.date()} (非交易日修正为最近交易日)")
+                logger.info(
+                    f"实时数据日期修正: {today.date()} -> {fixed_today.date()} (非交易日修正为最近交易日)"
+                )
 
             # 安全获取数值字段，处理 None 的情况
             def safe_float(value, default=0.0):
@@ -774,20 +816,27 @@ class TickFlowCrawler(BaseCrawler):
                     return default
 
             result = {
-                'datetime': pd.Timestamp(fixed_today.date()),
-                'open_price': safe_float(quote.get('open')),
-                'high_price': safe_float(quote.get('high')),
-                'low_price': safe_float(quote.get('low')),
-                'close_price': safe_float(quote.get('last_price')),
-                'volume': safe_float(quote.get('volume')),
-                'amount': safe_float(quote.get('amount')),
-                'stock_code': display_code,
-                'stock_name': quote.get('ext', {}).get('name', ''),
-                'period': '1d',
-                'source': 'tickflow_realtime'
+                "datetime": pd.Timestamp(fixed_today.date()),
+                "open_price": safe_float(quote.get("open")),
+                "high_price": safe_float(quote.get("high")),
+                "low_price": safe_float(quote.get("low")),
+                "close_price": safe_float(quote.get("last_price")),
+                "volume": safe_float(quote.get("volume")),
+                "amount": safe_float(quote.get("amount")),
+                "stock_code": display_code,
+                "stock_name": quote.get("ext", {}).get("name", ""),
+                "period": "1d",
+                "source": "tickflow_realtime",
             }
 
-            logger.info(f"获取实时行情数据: {display_code}, open={result['open_price']}, high={result['high_price']}, low={result['low_price']}, close={result['close_price']}, volume={result['volume']}")
+            logger.info(
+                "获取实时行情数据: " + display_code
+                + ", open=" + str(result["open_price"])
+                + ", high=" + str(result["high_price"])
+                + ", low=" + str(result["low_price"])
+                + ", close=" + str(result["close_price"])
+                + ", volume=" + str(result["volume"])
+            )
             return pd.DataFrame([result])
 
         except Exception as e:
@@ -818,7 +867,7 @@ class TickFlowCrawler(BaseCrawler):
 
         stocks = []
         for sym in TickFlowCrawler._universe_symbols[:100]:  # 限制数量避免过大
-            short = sym.split('.')[0] if '.' in sym else sym
+            short = sym.split(".")[0] if "." in sym else sym
             stocks.append({"code": short, "name": sym})
         return stocks
 

@@ -1,9 +1,11 @@
-from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from app.utils.technical_indicators import TechnicalIndicators
+from sqlalchemy.orm import Session
+
 from app.core.logger import logger
+from app.utils.technical_indicators import TechnicalIndicators
 
 # =============================================================================
 # 模块级全局变量说明
@@ -19,7 +21,8 @@ from app.core.logger import logger
 # 尝试导入 exchange_calendars 进行精确交易日判断
 try:
     import exchange_calendars as ec
-    _xshg_calendar = ec.get_calendar('XSHG')
+
+    _xshg_calendar = ec.get_calendar("XSHG")
     _HAS_EXCHANGE_CALENDARS = True
 except Exception:
     _xshg_calendar = None
@@ -184,18 +187,20 @@ class IndicatorService:
         """
         data = []
         for stock in stock_data_list:
-            data.append({
-                'datetime': stock.datetime,
-                'open_price': stock.open_price,
-                'high_price': stock.high_price,
-                'low_price': stock.low_price,
-                'close_price': stock.close_price,
-                'volume': stock.volume,
-                'amount': stock.amount,
-            })
+            data.append(
+                {
+                    "datetime": stock.datetime,
+                    "open_price": stock.open_price,
+                    "high_price": stock.high_price,
+                    "low_price": stock.low_price,
+                    "close_price": stock.close_price,
+                    "volume": stock.volume,
+                    "amount": stock.amount,
+                }
+            )
         df = pd.DataFrame(data)
-        return df.sort_values('datetime').reset_index(drop=True)
-    
+        return df.sort_values("datetime").reset_index(drop=True)
+
     def _save_indicators_to_database(self, stock_data_list, df):
         """
         将计算得到的技术指标回写到数据库对应的 StockData 记录中。
@@ -220,42 +225,54 @@ class IndicatorService:
             if i >= len(df):
                 break
             row = df.iloc[i]
-            
-            if 'ma5' in row:
-                stock.ma5 = float(row['ma5']) if pd.notna(row['ma5']) else None
-            if 'ma10' in row:
-                stock.ma10 = float(row['ma10']) if pd.notna(row['ma10']) else None
-            if 'ma20' in row:
-                stock.ma20 = float(row['ma20']) if pd.notna(row['ma20']) else None
-            if 'ma60' in row:
-                stock.ma60 = float(row['ma60']) if pd.notna(row['ma60']) else None
-            
-            if 'kdj_k' in row:
-                stock.k = float(row['kdj_k']) if pd.notna(row['kdj_k']) else None
-            if 'kdj_d' in row:
-                stock.d = float(row['kdj_d']) if pd.notna(row['kdj_d']) else None
-            if 'kdj_j' in row:
-                stock.j = float(row['kdj_j']) if pd.notna(row['kdj_j']) else None
-            
-            if 'macd' in row:
-                stock.dif = float(row['macd']) if pd.notna(row['macd']) else None
-            if 'macd_signal' in row:
-                stock.dea = float(row['macd_signal']) if pd.notna(row['macd_signal']) else None
-            if 'macd_histogram' in row:
-                stock.macd = float(row['macd_histogram']) if pd.notna(row['macd_histogram']) else None
-            
-            if 'rsi' in row:
-                stock.rsi6 = float(row['rsi']) if pd.notna(row['rsi']) else None
-            
-            if 'bb_upper' in row:
-                stock.upper = float(row['bb_upper']) if pd.notna(row['bb_upper']) else None
-            if 'bb_middle' in row:
-                stock.middle = float(row['bb_middle']) if pd.notna(row['bb_middle']) else None
-            if 'bb_lower' in row:
-                stock.lower = float(row['bb_lower']) if pd.notna(row['bb_lower']) else None
-        
+
+            if "ma5" in row:
+                stock.ma5 = float(row["ma5"]) if pd.notna(row["ma5"]) else None
+            if "ma10" in row:
+                stock.ma10 = float(row["ma10"]) if pd.notna(row["ma10"]) else None
+            if "ma20" in row:
+                stock.ma20 = float(row["ma20"]) if pd.notna(row["ma20"]) else None
+            if "ma60" in row:
+                stock.ma60 = float(row["ma60"]) if pd.notna(row["ma60"]) else None
+
+            if "kdj_k" in row:
+                stock.k = float(row["kdj_k"]) if pd.notna(row["kdj_k"]) else None
+            if "kdj_d" in row:
+                stock.d = float(row["kdj_d"]) if pd.notna(row["kdj_d"]) else None
+            if "kdj_j" in row:
+                stock.j = float(row["kdj_j"]) if pd.notna(row["kdj_j"]) else None
+
+            if "macd" in row:
+                stock.dif = float(row["macd"]) if pd.notna(row["macd"]) else None
+            if "macd_signal" in row:
+                stock.dea = (
+                    float(row["macd_signal"]) if pd.notna(row["macd_signal"]) else None
+                )
+            if "macd_histogram" in row:
+                stock.macd = (
+                    float(row["macd_histogram"])
+                    if pd.notna(row["macd_histogram"])
+                    else None
+                )
+
+            if "rsi" in row:
+                stock.rsi6 = float(row["rsi"]) if pd.notna(row["rsi"]) else None
+
+            if "bb_upper" in row:
+                stock.upper = (
+                    float(row["bb_upper"]) if pd.notna(row["bb_upper"]) else None
+                )
+            if "bb_middle" in row:
+                stock.middle = (
+                    float(row["bb_middle"]) if pd.notna(row["bb_middle"]) else None
+                )
+            if "bb_lower" in row:
+                stock.lower = (
+                    float(row["bb_lower"]) if pd.notna(row["bb_lower"]) else None
+                )
+
         self.db.commit()
-    
+
     def _format_result(self, stock_data_list):
         """
         将 StockData ORM 对象列表格式化为标准字典列表，用于 API 响应返回。
@@ -282,31 +299,35 @@ class IndicatorService:
         result = []
         for stock in stock_data_list:
             item = {
-                'datetime': stock.datetime.isoformat() if hasattr(stock.datetime, 'isoformat') else str(stock.datetime),
-                'open_price': float(stock.open_price) if stock.open_price else None,
-                'high_price': float(stock.high_price) if stock.high_price else None,
-                'low_price': float(stock.low_price) if stock.low_price else None,
-                'close_price': float(stock.close_price) if stock.close_price else None,
-                'volume': float(stock.volume) if stock.volume else None,
-                'amount': float(stock.amount) if stock.amount else None,
-                'ma5': float(stock.ma5) if stock.ma5 else None,
-                'ma10': float(stock.ma10) if stock.ma10 else None,
-                'ma20': float(stock.ma20) if stock.ma20 else None,
-                'ma60': float(stock.ma60) if stock.ma60 else None,
-                'kdj_k': float(stock.k) if stock.k else None,
-                'kdj_d': float(stock.d) if stock.d else None,
-                'kdj_j': float(stock.j) if stock.j else None,
-                'macd': float(stock.dif) if stock.dif else None,
-            'macd_signal': float(stock.dea) if stock.dea else None,
-            'macd_histogram': float(stock.macd) if stock.macd else None,
-                'rsi': float(stock.rsi6) if stock.rsi6 else None,
-                'bb_upper': float(stock.upper) if stock.upper else None,
-                'bb_middle': float(stock.middle) if stock.middle else None,
-                'bb_lower': float(stock.lower) if stock.lower else None
+                "datetime": (
+                    stock.datetime.isoformat()
+                    if hasattr(stock.datetime, "isoformat")
+                    else str(stock.datetime)
+                ),
+                "open_price": float(stock.open_price) if stock.open_price else None,
+                "high_price": float(stock.high_price) if stock.high_price else None,
+                "low_price": float(stock.low_price) if stock.low_price else None,
+                "close_price": float(stock.close_price) if stock.close_price else None,
+                "volume": float(stock.volume) if stock.volume else None,
+                "amount": float(stock.amount) if stock.amount else None,
+                "ma5": float(stock.ma5) if stock.ma5 else None,
+                "ma10": float(stock.ma10) if stock.ma10 else None,
+                "ma20": float(stock.ma20) if stock.ma20 else None,
+                "ma60": float(stock.ma60) if stock.ma60 else None,
+                "kdj_k": float(stock.k) if stock.k else None,
+                "kdj_d": float(stock.d) if stock.d else None,
+                "kdj_j": float(stock.j) if stock.j else None,
+                "macd": float(stock.dif) if stock.dif else None,
+                "macd_signal": float(stock.dea) if stock.dea else None,
+                "macd_histogram": float(stock.macd) if stock.macd else None,
+                "rsi": float(stock.rsi6) if stock.rsi6 else None,
+                "bb_upper": float(stock.upper) if stock.upper else None,
+                "bb_middle": float(stock.middle) if stock.middle else None,
+                "bb_lower": float(stock.lower) if stock.lower else None,
             }
             result.append(item)
         return result
-    
+
     def _format_result_with_calculated_indicators(self, stock_data_list, df):
         """
         将 StockData ORM 对象与刚计算出的指标 DataFrame 合并，格式化为标准字典列表。
@@ -337,39 +358,151 @@ class IndicatorService:
             if i >= len(df):
                 break
             row = df.iloc[i]
-            
+
             item = {
-                'datetime': stock.datetime.isoformat() if hasattr(stock.datetime, 'isoformat') else str(stock.datetime),
-                'open_price': float(stock.open_price) if stock.open_price else None,
-                'high_price': float(stock.high_price) if stock.high_price else None,
-                'low_price': float(stock.low_price) if stock.low_price else None,
-                'close_price': float(stock.close_price) if stock.close_price else None,
-                'volume': float(stock.volume) if stock.volume else None,
-                'amount': float(stock.amount) if stock.amount else None,
+                "datetime": (
+                    stock.datetime.isoformat()
+                    if hasattr(stock.datetime, "isoformat")
+                    else str(stock.datetime)
+                ),
+                "open_price": float(stock.open_price) if stock.open_price else None,
+                "high_price": float(stock.high_price) if stock.high_price else None,
+                "low_price": float(stock.low_price) if stock.low_price else None,
+                "close_price": float(stock.close_price) if stock.close_price else None,
+                "volume": float(stock.volume) if stock.volume else None,
+                "amount": float(stock.amount) if stock.amount else None,
             }
-            
-            item['ma5'] = float(stock.ma5) if stock.ma5 else (float(row['ma5']) if 'ma5' in row and pd.notna(row['ma5']) else None)
-            item['ma10'] = float(stock.ma10) if stock.ma10 else (float(row['ma10']) if 'ma10' in row and pd.notna(row['ma10']) else None)
-            item['ma20'] = float(stock.ma20) if stock.ma20 else (float(row['ma20']) if 'ma20' in row and pd.notna(row['ma20']) else None)
-            item['ma60'] = float(stock.ma60) if stock.ma60 else (float(row['ma60']) if 'ma60' in row and pd.notna(row['ma60']) else None)
-            
-            item['kdj_k'] = float(stock.k) if stock.k else (float(row['kdj_k']) if 'kdj_k' in row and pd.notna(row['kdj_k']) else None)
-            item['kdj_d'] = float(stock.d) if stock.d else (float(row['kdj_d']) if 'kdj_d' in row and pd.notna(row['kdj_d']) else None)
-            item['kdj_j'] = float(stock.j) if stock.j else (float(row['kdj_j']) if 'kdj_j' in row and pd.notna(row['kdj_j']) else None)
-            
-            item['macd'] = float(stock.dif) if stock.dif else (float(row['macd']) if 'macd' in row and pd.notna(row['macd']) else None)
-            item['macd_signal'] = float(stock.dea) if stock.dea else (float(row['macd_signal']) if 'macd_signal' in row and pd.notna(row['macd_signal']) else None)
-            item['macd_histogram'] = float(stock.macd) if stock.macd else (float(row['macd_histogram']) if 'macd_histogram' in row and pd.notna(row['macd_histogram']) else None)
-            
-            item['rsi'] = float(stock.rsi6) if stock.rsi6 else (float(row['rsi']) if 'rsi' in row and pd.notna(row['rsi']) else None)
-            
-            item['bb_upper'] = float(stock.upper) if stock.upper else (float(row['bb_upper']) if 'bb_upper' in row and pd.notna(row['bb_upper']) else None)
-            item['bb_middle'] = float(stock.middle) if stock.middle else (float(row['bb_middle']) if 'bb_middle' in row and pd.notna(row['bb_middle']) else None)
-            item['bb_lower'] = float(stock.lower) if stock.lower else (float(row['bb_lower']) if 'bb_lower' in row and pd.notna(row['bb_lower']) else None)
-            
+
+            item["ma5"] = (
+                float(stock.ma5)
+                if stock.ma5
+                else (
+                    float(row["ma5"]) if "ma5" in row and pd.notna(row["ma5"]) else None
+                )
+            )
+            item["ma10"] = (
+                float(stock.ma10)
+                if stock.ma10
+                else (
+                    float(row["ma10"])
+                    if "ma10" in row and pd.notna(row["ma10"])
+                    else None
+                )
+            )
+            item["ma20"] = (
+                float(stock.ma20)
+                if stock.ma20
+                else (
+                    float(row["ma20"])
+                    if "ma20" in row and pd.notna(row["ma20"])
+                    else None
+                )
+            )
+            item["ma60"] = (
+                float(stock.ma60)
+                if stock.ma60
+                else (
+                    float(row["ma60"])
+                    if "ma60" in row and pd.notna(row["ma60"])
+                    else None
+                )
+            )
+
+            item["kdj_k"] = (
+                float(stock.k)
+                if stock.k
+                else (
+                    float(row["kdj_k"])
+                    if "kdj_k" in row and pd.notna(row["kdj_k"])
+                    else None
+                )
+            )
+            item["kdj_d"] = (
+                float(stock.d)
+                if stock.d
+                else (
+                    float(row["kdj_d"])
+                    if "kdj_d" in row and pd.notna(row["kdj_d"])
+                    else None
+                )
+            )
+            item["kdj_j"] = (
+                float(stock.j)
+                if stock.j
+                else (
+                    float(row["kdj_j"])
+                    if "kdj_j" in row and pd.notna(row["kdj_j"])
+                    else None
+                )
+            )
+
+            item["macd"] = (
+                float(stock.dif)
+                if stock.dif
+                else (
+                    float(row["macd"])
+                    if "macd" in row and pd.notna(row["macd"])
+                    else None
+                )
+            )
+            item["macd_signal"] = (
+                float(stock.dea)
+                if stock.dea
+                else (
+                    float(row["macd_signal"])
+                    if "macd_signal" in row and pd.notna(row["macd_signal"])
+                    else None
+                )
+            )
+            item["macd_histogram"] = (
+                float(stock.macd)
+                if stock.macd
+                else (
+                    float(row["macd_histogram"])
+                    if "macd_histogram" in row and pd.notna(row["macd_histogram"])
+                    else None
+                )
+            )
+
+            item["rsi"] = (
+                float(stock.rsi6)
+                if stock.rsi6
+                else (
+                    float(row["rsi"]) if "rsi" in row and pd.notna(row["rsi"]) else None
+                )
+            )
+
+            item["bb_upper"] = (
+                float(stock.upper)
+                if stock.upper
+                else (
+                    float(row["bb_upper"])
+                    if "bb_upper" in row and pd.notna(row["bb_upper"])
+                    else None
+                )
+            )
+            item["bb_middle"] = (
+                float(stock.middle)
+                if stock.middle
+                else (
+                    float(row["bb_middle"])
+                    if "bb_middle" in row and pd.notna(row["bb_middle"])
+                    else None
+                )
+            )
+            item["bb_lower"] = (
+                float(stock.lower)
+                if stock.lower
+                else (
+                    float(row["bb_lower"])
+                    if "bb_lower" in row and pd.notna(row["bb_lower"])
+                    else None
+                )
+            )
+
             result.append(item)
         return result
-    
+
     def get_stock_data_with_indicators(
         self,
         stock_code: str,
@@ -377,7 +510,7 @@ class IndicatorService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         limit: Optional[int] = None,
-        auto_save: bool = True
+        auto_save: bool = True,
     ) -> Dict[str, Any]:
         """
         获取指定股票在指定周期和日期范围内的行情数据及技术指标。
@@ -425,20 +558,31 @@ class IndicatorService:
         """
         # 将短代码转换为完整代码（如 000001 -> 000001.SZ）
         from app.models.stock_data import StockCode
+
         full_symbol = None
-        if '.' not in stock_code:
+        if "." not in stock_code:
             # 查询完整代码
-            code_record = self.db.query(StockCode).filter(StockCode.code == stock_code).first()
+            code_record = (
+                self.db.query(StockCode).filter(StockCode.code == stock_code).first()
+            )
             if code_record:
                 full_symbol = code_record.name
         if not full_symbol:
             full_symbol = stock_code
 
-        logger.info(f"开始获取股票指标数据: stock_code={stock_code}(完整代码:{full_symbol}), period={period}, start_date={start_date}, end_date={end_date}, limit={limit}")
+        logger.info(
+            "开始获取股票指标数据: stock_code=" + stock_code
+            + "(完整代码:" + full_symbol + "), period=" + period
+            + ", start_date=" + str(start_date)
+            + ", end_date=" + str(end_date)
+            + ", limit=" + str(limit)
+        )
+
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import desc
 
         from app.models.stock_data import StockData
-        from sqlalchemy import desc
-        from datetime import datetime, timedelta
 
         # 使用完整代码查询数据库
         stock_code = full_symbol
@@ -449,38 +593,42 @@ class IndicatorService:
             logger.debug(f"检查日期范围内数据: {start_date} ~ {end_date}")
             req_start = datetime.strptime(start_date, "%Y-%m-%d")
             req_end = datetime.strptime(end_date, "%Y-%m-%d")
-            
+
             # 查询指定范围内的所有数据
-            all_query = self.db.query(StockData).filter(
-                StockData.stock_code == stock_code,
-                StockData.period == period,
-                StockData.datetime >= req_start,
-                StockData.datetime <= req_end
-            ).order_by(StockData.datetime)
-            
+            all_query = (
+                self.db.query(StockData)
+                .filter(
+                    StockData.stock_code == stock_code,
+                    StockData.period == period,
+                    StockData.datetime >= req_start,
+                    StockData.datetime <= req_end,
+                )
+                .order_by(StockData.datetime)
+            )
+
             all_requested_data = all_query.all()
             logger.debug(f"查询到指定范围内数据条数: {len(all_requested_data)}")
-            
+
             if not all_requested_data:
                 # 完全没有数据，需要下载整个范围
-                logger.info(f"指定日期范围内无数据，标记下载范围: {start_date} ~ {end_date}")
-                missing_ranges.append({
-                    "start": start_date,
-                    "end": end_date
-                })
+                logger.info(
+                    f"指定日期范围内无数据，标记下载范围: {start_date} ~ {end_date}"
+                )
+                missing_ranges.append({"start": start_date, "end": end_date})
             else:
                 # 检查是否有间隙
-                logger.debug(f"检测数据缺失范围")
+                logger.debug("检测数据缺失范围")
                 missing_ranges = self._detect_missing_ranges(
                     all_requested_data, req_start, req_end
                 )
-                logger.debug(f"检测到缺失范围数量: {len(missing_ranges)}")
-        
+                logger.debug(
+                    "检测到缺失范围数量: " + str(len(missing_ranges))
+                )
+
         # 重新查询完整的数据集（不在这里同步下载，由 API 层的 BackgroundTasks 处理后台下载）
         logger.debug(f"查询数据库中股票数据: stock_code={stock_code}, period={period}")
         query = self.db.query(StockData).filter(
-            StockData.stock_code == stock_code,
-            StockData.period == period
+            StockData.stock_code == stock_code, StockData.period == period
         )
 
         # 处理日期范围过滤
@@ -526,7 +674,7 @@ class IndicatorService:
 
         has_missing_indicators = False
         for stock in stock_data_list:
-            if (stock.ma5 is None or stock.k is None or stock.macd is None):
+            if stock.ma5 is None or stock.k is None or stock.macd is None:
                 has_missing_indicators = True
                 break
 
@@ -534,19 +682,29 @@ class IndicatorService:
 
         if not has_missing_indicators:
             logger.info(f"股票 {stock_code} 数据完整，直接返回")
-            return {"data": self._format_result(stock_data_list), "missing_ranges": missing_ranges}
+            return {
+                "data": self._format_result(stock_data_list),
+                "missing_ranges": missing_ranges,
+            }
 
-        logger.info(f"检测到缺失指标，开始计算: {stock_code} {period}")
+        logger.info(
+            "检测到缺失指标，开始计算: " + stock_code + " " + period
+        )
         df = self._stock_list_to_dataframe(stock_data_list)
         df = TechnicalIndicators.calculate_all_indicators(df)
 
         if auto_save:
-            logger.info(f"自动保存指标计算结果到数据库")
+            logger.info("自动保存指标计算结果到数据库")
             self._save_indicators_to_database(stock_data_list, df)
 
-        logger.info(f"股票指标数据获取完成: stock_code={stock_code}, 数据条数={len(stock_data_list)}")
-        return {"data": self._format_result_with_calculated_indicators(stock_data_list, df), "missing_ranges": missing_ranges}
-    
+        logger.info(
+            f"股票指标数据获取完成: stock_code={stock_code}, 数据条数={len(stock_data_list)}"
+        )
+        return {
+            "data": self._format_result_with_calculated_indicators(stock_data_list, df),
+            "missing_ranges": missing_ranges,
+        }
+
     def calculate_and_save_indicators(self, stock_code: str, period: str = "1d"):
         """
         为指定股票的全部历史数据计算技术指标并保存到数据库。
@@ -573,24 +731,27 @@ class IndicatorService:
             5. 返回处理的数据条数。
         """
         from app.models.stock_data import StockData
-        from sqlalchemy import desc
 
-        query = self.db.query(StockData).filter(
-            StockData.stock_code == stock_code,
-            StockData.period == period
-        ).order_by(StockData.datetime)
-        
+        query = (
+            self.db.query(StockData)
+            .filter(
+                StockData.stock_code == stock_code,
+                StockData.period == period,
+            )
+            .order_by(StockData.datetime)
+        )
+
         stock_data_list = query.all()
-        
+
         if not stock_data_list:
             return 0
-        
+
         df = self._stock_list_to_dataframe(stock_data_list)
         df = TechnicalIndicators.calculate_all_indicators(df)
-        
+
         self._save_indicators_to_database(stock_data_list, df)
         return len(stock_data_list)
-    
+
     @staticmethod
     def calculate_indicators_for_df_static(df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -602,14 +763,18 @@ class IndicatorService:
 
         返回值：
             pd.DataFrame: 在原 DataFrame 基础上追加指标列后的新 DataFrame，
-                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、macd_signal、macd_histogram、rsi、bb_upper、bb_middle、bb_lower 等列。
+                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、
+                macd_signal、macd_histogram、rsi、bb_upper、bb_middle、
+                bb_lower 等列。
 
         调用关系：
-            可在不实例化 IndicatorService 的情况下直接调用，适用于纯数据处理场景。
+            可在不实例化 IndicatorService 的情况下直接调用，
+            适用于纯数据处理场景。
             内部调用 TechnicalIndicators.calculate_all_indicators 完成实际计算。
 
         关键逻辑：
-            直接委托给 TechnicalIndicators.calculate_all_indicators，保持与实例方法一致的计算逻辑。
+            直接委托给 TechnicalIndicators.calculate_all_indicators，
+            保持与实例方法一致的计算逻辑。
         """
         return TechnicalIndicators.calculate_all_indicators(df)
 
@@ -623,7 +788,9 @@ class IndicatorService:
 
         返回值：
             pd.DataFrame: 在原 DataFrame 基础上追加指标列后的新 DataFrame，
-                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、macd_signal、macd_histogram、rsi、bb_upper、bb_middle、bb_lower 等列。
+                包含 ma5、ma10、ma20、ma60、kdj_k、kdj_d、kdj_j、macd、
+                macd_signal、macd_histogram、rsi、bb_upper、bb_middle、
+                bb_lower 等列。
 
         调用关系：
             由需要结合服务实例上下文（如日志、数据库会话）的调用方使用。
@@ -634,7 +801,7 @@ class IndicatorService:
             但以实例方法形式提供，便于在类体系内统一调用。
         """
         return TechnicalIndicators.calculate_all_indicators(df)
-    
+
     def get_kdj_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """
         从行情 DataFrame 中识别 KDJ 指标的金叉/死叉交易信号。
@@ -664,34 +831,49 @@ class IndicatorService:
         """
         signals = []
         df = TechnicalIndicators.calculate_kdj(df)
-        
+
         for i in range(1, len(df)):
-            prev_k = df.iloc[i-1]['kdj_k']
-            prev_d = df.iloc[i-1]['kdj_d']
-            curr_k = df.iloc[i]['kdj_k']
-            curr_d = df.iloc[i]['kdj_d']
-            curr_j = df.iloc[i]['kdj_j']
-            
-            if pd.notna(prev_k) and pd.notna(prev_d) and pd.notna(curr_k) and pd.notna(curr_d):
+            prev_k = df.iloc[i - 1]["kdj_k"]
+            prev_d = df.iloc[i - 1]["kdj_d"]
+            curr_k = df.iloc[i]["kdj_k"]
+            curr_d = df.iloc[i]["kdj_d"]
+            if (
+                pd.notna(prev_k)
+                and pd.notna(prev_d)
+                and pd.notna(curr_k)
+                and pd.notna(curr_d)
+            ):
                 if prev_k <= prev_d and curr_k > curr_d and curr_k < 20:
-                    signals.append({
-                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
-                        'type': 'buy',
-                        'indicator': 'KDJ',
-                        'reason': 'K线上穿D线，超卖区域金叉',
-                        'price': float(df.iloc[i]['close_price'])
-                    })
+                    signals.append(
+                        {
+                            "datetime": (
+                                df.iloc[i]["datetime"].isoformat()
+                                if hasattr(df.iloc[i]["datetime"], "isoformat")
+                                else str(df.iloc[i]["datetime"])
+                            ),
+                            "type": "buy",
+                            "indicator": "KDJ",
+                            "reason": "K线上穿D线，超卖区域金叉",
+                            "price": float(df.iloc[i]["close_price"]),
+                        }
+                    )
                 elif prev_k >= prev_d and curr_k < curr_d and curr_k > 80:
-                    signals.append({
-                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
-                        'type': 'sell',
-                        'indicator': 'KDJ',
-                        'reason': 'K线下穿D线，超买区域死叉',
-                        'price': float(df.iloc[i]['close_price'])
-                    })
-        
+                    signals.append(
+                        {
+                            "datetime": (
+                                df.iloc[i]["datetime"].isoformat()
+                                if hasattr(df.iloc[i]["datetime"], "isoformat")
+                                else str(df.iloc[i]["datetime"])
+                            ),
+                            "type": "sell",
+                            "indicator": "KDJ",
+                            "reason": "K线下穿D线，超买区域死叉",
+                            "price": float(df.iloc[i]["close_price"]),
+                        }
+                    )
+
         return signals
-    
+
     def get_macd_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         """
         从行情 DataFrame 中识别 MACD 指标的金叉/死叉交易信号。
@@ -721,33 +903,50 @@ class IndicatorService:
         """
         signals = []
         df = TechnicalIndicators.calculate_macd(df)
-        
+
         for i in range(1, len(df)):
-            prev_macd = df.iloc[i-1]['macd']
-            prev_signal = df.iloc[i-1]['macd_signal']
-            curr_macd = df.iloc[i]['macd']
-            curr_signal = df.iloc[i]['macd_signal']
-            
-            if pd.notna(prev_macd) and pd.notna(prev_signal) and pd.notna(curr_macd) and pd.notna(curr_signal):
+            prev_macd = df.iloc[i - 1]["macd"]
+            prev_signal = df.iloc[i - 1]["macd_signal"]
+            curr_macd = df.iloc[i]["macd"]
+            curr_signal = df.iloc[i]["macd_signal"]
+
+            if (
+                pd.notna(prev_macd)
+                and pd.notna(prev_signal)
+                and pd.notna(curr_macd)
+                and pd.notna(curr_signal)
+            ):
                 if prev_macd <= prev_signal and curr_macd > curr_signal:
-                    signals.append({
-                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
-                        'type': 'buy',
-                        'indicator': 'MACD',
-                        'reason': 'MACD上穿信号线，金叉',
-                        'price': float(df.iloc[i]['close_price'])
-                    })
+                    signals.append(
+                        {
+                            "datetime": (
+                                df.iloc[i]["datetime"].isoformat()
+                                if hasattr(df.iloc[i]["datetime"], "isoformat")
+                                else str(df.iloc[i]["datetime"])
+                            ),
+                            "type": "buy",
+                            "indicator": "MACD",
+                            "reason": "MACD上穿信号线，金叉",
+                            "price": float(df.iloc[i]["close_price"]),
+                        }
+                    )
                 elif prev_macd >= prev_signal and curr_macd < curr_signal:
-                    signals.append({
-                        'datetime': df.iloc[i]['datetime'].isoformat() if hasattr(df.iloc[i]['datetime'], 'isoformat') else str(df.iloc[i]['datetime']),
-                        'type': 'sell',
-                        'indicator': 'MACD',
-                        'reason': 'MACD下穿信号线，死叉',
-                        'price': float(df.iloc[i]['close_price'])
-                    })
-        
+                    signals.append(
+                        {
+                            "datetime": (
+                                df.iloc[i]["datetime"].isoformat()
+                                if hasattr(df.iloc[i]["datetime"], "isoformat")
+                                else str(df.iloc[i]["datetime"])
+                            ),
+                            "type": "sell",
+                            "indicator": "MACD",
+                            "reason": "MACD下穿信号线，死叉",
+                            "price": float(df.iloc[i]["close_price"]),
+                        }
+                    )
+
         return signals
-    
+
     def _detect_missing_ranges(self, stock_data_list, req_start, req_end):
         """
         检测请求日期范围内数据库中缺失的数据区间（仅针对交易日）。
@@ -776,16 +975,23 @@ class IndicatorService:
             5. 对包含今天的缺失范围进行拆分：今天之前用历史接口，今天单独标记 realtime；
             6. 仅在今天及之前的日期范围内生成缺失记录，未来日期不纳入缺失范围。
         """
-        from datetime import timedelta
-        from datetime import date
+        from datetime import date, timedelta
 
-        logger.debug(f"开始检测缺失数据范围: 请求范围 {req_start.date()} ~ {req_end.date()}, 数据条数={len(stock_data_list) if stock_data_list else 0}")
+        data_count = len(stock_data_list) if stock_data_list else 0
+        logger.debug(
+            "开始检测缺失数据范围: 请求范围 "
+            + str(req_start.date())
+            + " ~ " + str(req_end.date())
+            + ", 数据条数=" + str(data_count)
+        )
 
         missing_ranges = []
         today = date.today()
 
         if not stock_data_list:
-            logger.info(f"数据列表为空，整个范围缺失: {req_start.date()} ~ {req_end.date()}")
+            logger.info(
+                f"数据列表为空，整个范围缺失: {req_start.date()} ~ {req_end.date()}"
+            )
             # 如果完全没有数据，整个范围都缺失
             # 将范围边界对齐到交易日
             aligned_start = _align_to_trading_day(req_start.date(), direction="forward")
@@ -793,30 +999,40 @@ class IndicatorService:
 
             # 如果对齐后范围无效（如整个范围都是非交易日），不生成缺失范围
             if aligned_start > aligned_end or aligned_start > today:
-                logger.debug(f"对齐后范围无效，无缺失: aligned_start={aligned_start}, aligned_end={aligned_end}")
+                logger.debug(
+                    f"对齐后范围无效，无缺失: aligned_start={aligned_start}, aligned_end={aligned_end}"
+                )
                 return missing_ranges
 
             # 但如果范围包含今天，将今天之前的部分和今天分开处理
             if aligned_end >= today and aligned_start < today:
                 # 今天之前有缺失，用历史接口
-                before_today = _align_to_trading_day(today - timedelta(days=1), direction="backward")
+                before_today = _align_to_trading_day(
+                    today - timedelta(days=1), direction="backward"
+                )
                 if aligned_start <= before_today:
-                    missing_ranges.append({
-                        "start": aligned_start.strftime("%Y-%m-%d"),
-                        "end": before_today.strftime("%Y-%m-%d")
-                    })
+                    missing_ranges.append(
+                        {
+                            "start": aligned_start.strftime("%Y-%m-%d"),
+                            "end": before_today.strftime("%Y-%m-%d"),
+                        }
+                    )
                 # 今天单独标记为实时接口
                 if _is_trading_day(today):
-                    missing_ranges.append({
-                        "start": today.strftime("%Y-%m-%d"),
-                        "end": today.strftime("%Y-%m-%d"),
-                        "source": "realtime"
-                    })
+                    missing_ranges.append(
+                        {
+                            "start": today.strftime("%Y-%m-%d"),
+                            "end": today.strftime("%Y-%m-%d"),
+                            "source": "realtime",
+                        }
+                    )
             else:
-                missing_ranges.append({
-                    "start": aligned_start.strftime("%Y-%m-%d"),
-                    "end": aligned_end.strftime("%Y-%m-%d")
-                })
+                missing_ranges.append(
+                    {
+                        "start": aligned_start.strftime("%Y-%m-%d"),
+                        "end": aligned_end.strftime("%Y-%m-%d"),
+                    }
+                )
             logger.debug(f"标记缺失范围: {missing_ranges}")
             return missing_ranges
 
@@ -828,7 +1044,9 @@ class IndicatorService:
         logger.debug(f"已存在的日期数量: {len(existing_dates)}")
         if existing_dates:
             sorted_dates = sorted(existing_dates)
-            logger.debug(f"已存在日期范围: {sorted_dates[0]} ~ {sorted_dates[-1]}, 具体日期: {sorted_dates}")
+            logger.debug(
+                f"已存在日期范围: {sorted_dates[0]} ~ {sorted_dates[-1]}, 具体日期: {sorted_dates}"
+            )
 
         # 检查请求范围内的每个交易日是否存在
         current_date = req_start.date()
@@ -849,7 +1067,10 @@ class IndicatorService:
                 missing_start = current_date
 
                 # 查找连续缺失的日期范围，跳过未来日期和非交易日
-                while current_date <= req_end.date() and current_date not in existing_dates:
+                while (
+                    current_date <= req_end.date()
+                    and current_date not in existing_dates
+                ):
                     if current_date > today:
                         break
                     current_date += timedelta(days=1)
@@ -858,48 +1079,79 @@ class IndicatorService:
                     missing_end = min(current_date - timedelta(days=1), today)
 
                     # 将缺失范围边界对齐到交易日
-                    aligned_missing_start = _align_to_trading_day(missing_start, direction="forward")
-                    aligned_missing_end = _align_to_trading_day(missing_end, direction="backward")
+                    aligned_missing_start = _align_to_trading_day(
+                        missing_start, direction="forward"
+                    )
+                    aligned_missing_end = _align_to_trading_day(
+                        missing_end, direction="backward"
+                    )
 
                     # 如果对齐后范围无效，跳过
-                    if aligned_missing_start > aligned_missing_end or aligned_missing_start > today:
-                        logger.debug(f"对齐后缺失范围无效，跳过: {missing_start} ~ {missing_end}")
+                    if (
+                        aligned_missing_start > aligned_missing_end
+                        or aligned_missing_start > today
+                    ):
+                        logger.debug(
+                            f"对齐后缺失范围无效，跳过: {missing_start} ~ {missing_end}"
+                        )
                         continue
 
                     # 只有当缺失范围在今天或之前时才添加
                     if aligned_missing_start <= today:
                         # 如果缺失范围包含今天，将今天之前的部分和今天分开
-                        if aligned_missing_end >= today and aligned_missing_start < today:
+                        if (
+                            aligned_missing_end >= today
+                            and aligned_missing_start < today
+                        ):
                             # 今天之前的部分用历史接口
-                            before_today = _align_to_trading_day(today - timedelta(days=1), direction="backward")
+                            before_today = _align_to_trading_day(
+                                today - timedelta(days=1), direction="backward"
+                            )
                             if aligned_missing_start <= before_today:
-                                missing_ranges.append({
-                                    "start": aligned_missing_start.strftime("%Y-%m-%d"),
-                                    "end": before_today.strftime("%Y-%m-%d")
-                                })
+                                missing_ranges.append(
+                                    {
+                                        "start": aligned_missing_start.strftime(
+                                            "%Y-%m-%d"
+                                        ),
+                                        "end": before_today.strftime("%Y-%m-%d"),
+                                    }
+                                )
                             # 今天单独标记为实时接口
                             if _is_trading_day(today):
-                                missing_ranges.append({
-                                    "start": today.strftime("%Y-%m-%d"),
-                                    "end": today.strftime("%Y-%m-%d"),
-                                    "source": "realtime"
-                                })
-                        elif aligned_missing_start == today and aligned_missing_end == today:
+                                missing_ranges.append(
+                                    {
+                                        "start": today.strftime("%Y-%m-%d"),
+                                        "end": today.strftime("%Y-%m-%d"),
+                                        "source": "realtime",
+                                    }
+                                )
+                        elif (
+                            aligned_missing_start == today
+                            and aligned_missing_end == today
+                        ):
                             # 只有今天缺失，用实时接口
                             if _is_trading_day(today):
-                                missing_ranges.append({
-                                    "start": today.strftime("%Y-%m-%d"),
-                                    "end": today.strftime("%Y-%m-%d"),
-                                    "source": "realtime"
-                                })
+                                missing_ranges.append(
+                                    {
+                                        "start": today.strftime("%Y-%m-%d"),
+                                        "end": today.strftime("%Y-%m-%d"),
+                                        "source": "realtime",
+                                    }
+                                )
                         else:
                             # 不包含今天，用历史接口
                             missing_range = {
                                 "start": aligned_missing_start.strftime("%Y-%m-%d"),
-                                "end": aligned_missing_end.strftime("%Y-%m-%d")
+                                "end": aligned_missing_end.strftime("%Y-%m-%d"),
                             }
                             missing_ranges.append(missing_range)
-                        logger.info(f"检测到缺失范围: {aligned_missing_start} ~ {aligned_missing_end} (原始: {missing_start} ~ {missing_end})")
+                        logger.info(
+                            "检测到缺失范围: "
+                            + str(aligned_missing_start)
+                            + " ~ " + str(aligned_missing_end)
+                            + " (原始: " + str(missing_start)
+                            + " ~ " + str(missing_end) + ")"
+                        )
 
                 # 如果刚好到达循环条件，跳出循环
                 if current_date > req_end.date():
@@ -907,9 +1159,11 @@ class IndicatorService:
             else:
                 current_date += timedelta(days=1)
 
-        logger.debug(f"缺失范围检测完成，总计 {len(missing_ranges)} 个范围: {missing_ranges}")
+        logger.debug(
+            f"缺失范围检测完成，总计 {len(missing_ranges)} 个范围: {missing_ranges}"
+        )
         return missing_ranges
-    
+
     def _merge_overlapping_ranges(self, ranges):
         """
         合并重叠或相邻的日期范围，减少冗余的缺失区间记录。
@@ -936,24 +1190,24 @@ class IndicatorService:
         """
         if not ranges:
             return []
-        
+
         # 按开始日期排序
         sorted_ranges = sorted(ranges, key=lambda x: x["start"])
         merged = [sorted_ranges[0].copy()]
-        
+
         for current in sorted_ranges[1:]:
             last = merged[-1]
-            
+
             # 解析日期进行比较
             last_end = datetime.strptime(last["end"], "%Y-%m-%d").date()
             curr_start = datetime.strptime(current["start"], "%Y-%m-%d").date()
-            
+
             # 如果当前范围与上一个范围重叠或相邻，则合并
             if curr_start <= last_end + timedelta(days=1):
                 last["end"] = max(last["end"], current["end"])
             else:
                 merged.append(current.copy())
-        
+
         return merged
 
     def get_all_signals(self, df: pd.DataFrame) -> List[Dict[str, Any]]:

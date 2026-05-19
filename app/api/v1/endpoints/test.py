@@ -4,26 +4,31 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 # SQLAlchemy 数据库会话类型
 from sqlalchemy.orm import Session
+
+# 依赖项（如获取当前用户）
+from app.api import deps
 # 数据库会话依赖函数（用于获取数据库会话）
 from app.core.database import get_db
 # JWT 令牌创建函数 & 密码验证函数
-from app.core.security import create_access_token, verify_password
-# 用户相关的 Pydantic 模型（请求体和响应体）
-from app.schemas.user import UserCreate, UserOut
+from app.core.security import create_access_token
 # 令牌响应的 Pydantic 模型
 from app.schemas.token import Token
+# 用户相关的 Pydantic 模型（请求体和响应体）
+from app.schemas.user import UserCreate, UserOut
 # 用户业务逻辑层（数据库操作）
 from app.services import user_service
-# 依赖项（如获取当前用户）
-from app.api import deps
 
 # 创建一个路由处理器实例，后续的所有路由都注册在这个 router 对象上
 router = APIRouter()
 
+
 # 注册接口：POST /register
 # response_model=UserOut 表示成功时返回 UserOut 结构的数据
 # status_code=201 表示创建成功
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     """
     用户注册
@@ -36,7 +41,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         # 若邮箱已注册，抛出 400 错误，并给出明确提示
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Email already registered",
         )
     # 调用 service 层创建新用户（内部会哈希密码并存入数据库）
     user = user_service.create_user(db, user_in)
@@ -47,7 +52,10 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 # 登录接口：POST /login
 # response_model=Token 表示成功时返回 access_token 和 token_type
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     """
     用户登录（OAuth2 密码模式）
     - form_data: FastAPI 内置表单依赖，自动提取 username 和 password 字段
@@ -55,7 +63,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     - db: 数据库会话
     """
     # 调用 service 层验证用户凭证（根据邮箱和密码查找用户，密码验证在 service 内部完成）
-    user = user_service.authenticate_user(db, form_data.username, form_data.password)
+    user = user_service.authenticate_user(
+        db, form_data.username, form_data.password
+    )
     if not user:
         # 验证失败（用户不存在或密码错误），抛出 401 未授权错误
         raise HTTPException(
@@ -65,7 +75,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     # 验证成功，生成 JWT 访问令牌，sub（主题）字段存储用户邮箱
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(
+        data={"sub": user.email}
+    )
     # 按照 OAuth2 规范返回 token 和 token_type
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -73,7 +85,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 # 获取当前登录用户信息：GET /me
 # response_model=UserOut 表示返回用户公开信息
 @router.get("/me", response_model=UserOut)
-def read_current_user(current_user = Depends(deps.get_current_active_user)):
+def read_current_user(current_user=Depends(deps.get_current_active_user)):
     """
     获取当前已认证的用户信息（需要携带 Bearer Token）
     - current_user: 通过 deps.get_current_active_user 依赖注入获得

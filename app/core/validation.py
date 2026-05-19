@@ -1,6 +1,6 @@
 import re
 from typing import Optional
-from pydantic import field_validator
+
 from fastapi import HTTPException
 
 
@@ -49,6 +49,7 @@ class InputValidator:
 
 def validate_safe_path(path: str, base_dir: str) -> str:
     import os
+
     safe_path = os.path.normpath(path)
     if safe_path.startswith("..") or os.path.isabs(safe_path):
         raise HTTPException(status_code=400, detail="无效的路径")

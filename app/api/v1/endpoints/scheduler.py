@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.crawlers.scheduler import get_scheduler, CrawlerScheduler
+from fastapi import APIRouter
+
+from app.crawlers.scheduler import get_scheduler
 
 router = APIRouter()
 

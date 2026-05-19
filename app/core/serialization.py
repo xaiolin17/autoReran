@@ -1,14 +1,17 @@
 try:
     import orjson
+
     HAS_ORJSON = True
 except ImportError:
     import json
+
     HAS_ORJSON = False
 
-import msgpack
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+
+import msgpack
 from fastapi.responses import Response
 
 
@@ -55,4 +58,6 @@ class ORJSONResponse(Response):
         if HAS_ORJSON:
             return orjson.dumps(content, default=default)
         else:
-            return json.dumps(content, default=default, ensure_ascii=False).encode("utf-8")
+            return json.dumps(content, default=default, ensure_ascii=False).encode(
+                "utf-8"
+            )

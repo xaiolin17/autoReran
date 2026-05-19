@@ -1,5 +1,7 @@
-from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List
+
+from fastapi import WebSocket, WebSocketDisconnect
+
 from app.core.logger import logger
 
 
@@ -12,12 +14,19 @@ class ConnectionManager:
         if channel not in self.active_connections:
             self.active_connections[channel] = []
         self.active_connections[channel].append(websocket)
-        logger.info(f"WebSocket连接已建立: channel={channel}, total={len(self.active_connections[channel])}")
+        logger.info(
+            f"WebSocket连接已建立: channel={channel}, total={len(self.active_connections[channel])}"
+        )
 
     def disconnect(self, websocket: WebSocket, channel: str = "default"):
-        if channel in self.active_connections and websocket in self.active_connections[channel]:
+        if (
+            channel in self.active_connections
+            and websocket in self.active_connections[channel]
+        ):
             self.active_connections[channel].remove(websocket)
-            logger.info(f"WebSocket连接已断开: channel={channel}, remaining={len(self.active_connections[channel])}")
+            logger.info(
+                f"WebSocket连接已断开: channel={channel}, remaining={len(self.active_connections[channel])}"
+            )
 
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         try:
@@ -28,7 +37,7 @@ class ConnectionManager:
     async def broadcast(self, message: dict, channel: str = "default"):
         if channel not in self.active_connections:
             return
-        
+
         disconnected = []
         for connection in self.active_connections[channel]:
             try:
@@ -38,7 +47,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"广播消息失败: {str(e)}")
                 disconnected.append(connection)
-        
+
         for connection in disconnected:
             self.disconnect(connection, channel)
 

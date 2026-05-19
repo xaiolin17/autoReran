@@ -1,10 +1,12 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
+
+from pydantic import BaseModel
 
 
 class OptionData(BaseModel):
     """期权数据模型"""
+
     option_code: str
     stock_code: str
     strike_price: float
@@ -31,6 +33,7 @@ class OptionData(BaseModel):
 
 class OptionChainData(BaseModel):
     """期权链数据"""
+
     stock_code: str
     stock_price: Optional[float] = None
     expire_dates: List[str]

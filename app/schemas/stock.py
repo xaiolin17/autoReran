@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel
 
 
 class StockDataBase(BaseModel):
@@ -23,7 +24,7 @@ class StockDataCreate(StockDataBase):
 
 class StockData(StockDataBase):
     id: int
-    
+
     class Config:
         from_attributes = True
 

@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
+
 from app.core.config import settings
 
 connect_args = {}
@@ -12,7 +13,9 @@ else:
     poolclass = QueuePool
 
 async_engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://").replace("sqlite:///", "sqlite+aiosqlite:///"),
+    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://").replace(
+        "sqlite:///", "sqlite+aiosqlite:///"
+    ),
     connect_args=connect_args,
     poolclass=poolclass,
     pool_pre_ping=True,

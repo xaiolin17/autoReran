@@ -85,14 +85,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         # 否则使用配置文件中设定的默认过期分钟数
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
     # 将过期时间添加到待编码的字典中（标准 JWT 声明使用 "exp" 字段）
     to_encode.update({"exp": expire})
 
     # 使用 jose 库的 jwt.encode 进行编码
     # 参数: payload, secret key, 算法（默认为 HS256）
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
     return encoded_jwt
 
 
@@ -115,7 +119,7 @@ def decode_access_token(token: str) -> Optional[dict]:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,  # 使用相同的密钥验证签名
-            algorithms=[settings.ALGORITHM]  # 预期使用的算法列表
+            algorithms=[settings.ALGORITHM],  # 预期使用的算法列表
         )
         return payload
     except JWTError:
