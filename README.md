@@ -161,64 +161,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 2. 运行回测并查看结果
 3. 查看详细的交易记录和性能指标
 
-## API 接口概览
-
-### 数据
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/stocks/{stock_code}` | 获取数据 |
-| POST | `/api/v1/stocks/fetch/{stock_code}` | 获取并保存数据 |
-| POST | `/api/v1/stocks/fetch-async/{stock_code}` | 异步下载（WebSocket 通知进度） |
-| POST | `/api/v1/stocks/refresh/{stock_code}` | 刷新数据 |
-| POST | `/api/v1/stocks/force-refresh/{stock_code}` | 强制刷新历史数据 |
-| POST | `/api/v1/stocks/deduplicate/{stock_code}` | 数据去重 |
-| GET | `/api/v1/stocks/latest/{stock_code}` | 获取最新数据 |
-| GET | `/api/v1/stocks/search` | 搜索 |
-| GET | `/api/v1/stocks/marks` | 获取所有标记 |
-| PUT | `/api/v1/stocks/mark` | 添加/更新标记 |
-
-### 技术指标
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/indicators/{stock_code}` | 获取带指标数据 |
-| GET | `/api/v1/indicators/{stock_code}/paged` | 分页获取指标数据 |
-| GET | `/api/v1/indicators/{stock_code}/recent` | 获取最近数据 |
-| GET | `/api/v1/indicators/signals/{stock_code}` | 获取信号 |
-
-### 机器学习
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/ml/train` | 训练模型 |
-| POST | `/api/v1/ml/predict` | 预测价格 |
-| GET | `/api/v1/ml/models` | 获取模型列表 |
-| GET | `/api/v1/ml/models/{model_id}` | 获取模型详情 |
-| DELETE | `/api/v1/ml/models/{model_id}` | 删除模型 |
-
-### 回测
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/backtest/run` | 运行回测 |
-| GET | `/api/v1/backtest/results` | 获取回测结果 |
-| GET | `/api/v1/backtest/results/{backtest_id}` | 获取回测详情 |
-| DELETE | `/api/v1/backtest/results/{backtest_id}` | 删除回测结果 |
-
-### 期权分析
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/options/chain/{stock_code}` | 获取期权链数据 |
-| GET | `/api/v1/options/chain/{stock_code}/summary` | 获取期权摘要统计 |
-
-### WebSocket
-
-| 路径 | 说明 |
-|------|------|
-| `/ws/{client_id}` | 实时下载进度通知 |
-
 ## 数据流程
 
 ```
